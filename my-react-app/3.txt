@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blue 岛 - 岛屿管理中心</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js" type="module"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js" type="module"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js" type="module"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #050a18;
+            color: #e2e8f0;
+            margin: 0;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .admin-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .admin-card:hover {
+            background: rgba(255, 255, 255, 0.06);
+            transform: translateY(-2px);
+        }
+        input[type="range"] {
+            accent-color: #3b82f6;
+        }
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- 侧边栏 -->
+        <aside class="fixed left-0 top-0 h-full w-64 glass border-r border-white/5 z-20 hidden md:block">
+            <div class="p-8">
+                <div class="flex items-center gap-3 mb-10">
+                    <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-900/40">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                    </div>
+                    <span class="font-bold tracking-tighter text-lg text-white">岛屿控制台</span>
+                </div>
+                
+                <nav class="space-y-2">
+                    <button @click="currentTab = 'stats'" :class="currentTab === 'stats' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-white/40 hover:text-white'" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm font-medium">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18M18 17l-5-5-3 3-4-4"/></svg>
+                        数据概览
+                    </button>
+                    <button @click="currentTab = 'messages'" :class="currentTab === 'messages' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-white/40 hover:text-white'" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm font-medium">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                        留言管理
+                    </button>
+                    <button @click="currentTab = 'ai'" :class="currentTab === 'ai' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-white/40 hover:text-white'" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm font-medium">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10H12V2z"/><path d="M12 2a10 10 0 0 1 10 10h-10V2z"/><path d="M12 12L2.8 2.2"/><path d="M12 12L19 12"/></svg>
+                        模型设置
+                    </button>
+                </nav>
+            </div>
+            
+            <div class="absolute bottom-8 left-8 right-8 text-center">
+                <div class="glass p-4 rounded-2xl border border-white/10">
+                    <div class="text-[10px] uppercase tracking-widest opacity-30 mb-1">系统管理员</div>
+                    <div class="text-xs font-mono truncate text-blue-400">{{ user?.uid?.slice(0,12) }}...</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 主内容区 -->
+        <main class="md:ml-64 p-6 md:p-12 min-h-screen">
+            <!-- 顶部状态栏 -->
+            <header class="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
+                <div>
+                    <h1 class="text-3xl font-semibold text-white tracking-tight">
+                        {{ tabTitle }}
+                    </h1>
+                    <p class="text-sm opacity-40 mt-1">控制台 V2.1 • 智能核心版本 v0.9b</p>
+                </div>
+                <div class="flex items-center gap-4">
+                    <div v-if="saveStatus" class="text-[10px] text-blue-400 font-bold animate-pulse">{{ saveStatus }}</div>
+                    <div class="px-4 py-2 glass rounded-full flex items-center gap-2 text-[11px] font-bold">
+                        <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                        FIREBASE CONNECTED
+                    </div>
+                </div>
+            </header>
+
+            <!-- 视图 1：数据看板 -->
+            <div v-if="currentTab === 'stats'" class="animate-in fade-in slide-in-from-bottom-4 duration-700">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+                    <div class="glass p-8 rounded-[2rem] admin-card">
+                        <div class="text-4xl font-light mb-1">{{ messages.length }}</div>
+                        <div class="text-[10px] opacity-30 uppercase tracking-[0.2em] font-bold">累计投递留言</div>
+                    </div>
+                    <div class="glass p-8 rounded-[2rem] admin-card">
+                        <div class="text-4xl font-light mb-1">{{ totalLikes }}</div>
+                        <div class="text-[10px] opacity-30 uppercase tracking-[0.2em] font-bold">收到共鸣次数</div>
+                    </div>
+                    <div class="glass p-8 rounded-[2rem] admin-card">
+                        <div class="text-4xl font-light mb-1">{{ aiEchoCount }}</div>
+                        <div class="text-[10px] opacity-30 uppercase tracking-[0.2em] font-bold">AI 响应率 {{ ((aiEchoCount/messages.length || 0)*100).toFixed(0) }}%</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 视图 2：列表管理 -->
+            <div v-else-if="currentTab === 'messages'" class="animate-in fade-in duration-500">
+                <div class="mb-8">
+                    <input v-model="filterText" placeholder="搜索关键词、作者或暗号..." class="w-full glass rounded-2xl py-4 px-6 text-sm outline-none focus:bg-white/[0.08] transition-all border border-white/5" />
+                </div>
+                <div class="space-y-4">
+                    <div v-for="msg in filteredMessages" :key="msg.id" class="glass rounded-3xl p-6 flex items-start gap-6 group hover:bg-white/[0.05] transition-all border border-white/5">
+                        <img :src="msg.avatarUrl" class="w-12 h-12 rounded-2xl border border-white/10 shrink-0" />
+                        <div class="flex-1">
+                            <div class="flex items-center gap-3 mb-2">
+                                <span class="text-xs font-bold text-white/80">{{ msg.author }}</span>
+                                <span v-if="msg.secretCode" class="text-[9px] text-blue-400 font-bold uppercase tracking-widest bg-blue-400/10 px-2 py-0.5 rounded">#{{ msg.secretCode }}</span>
+                                <span class="text-[10px] opacity-20 font-mono ml-auto">{{ formatTime(msg.createdAt) }}</span>
+                            </div>
+                            <p class="text-sm opacity-60 leading-relaxed">{{ msg.content }}</p>
+                        </div>
+                        <button @click="confirmDelete(msg.id)" class="p-3 text-red-400/30 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 视图 3：AI 模型配置 -->
+            <div v-else-if="currentTab === 'ai'" class="animate-in fade-in slide-in-from-right-4 duration-500 max-w-4xl">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <!-- 人格设置 -->
+                    <div class="space-y-6">
+                        <div class="glass p-8 rounded-[2.5rem] border border-white/5">
+                            <label class="block text-[10px] uppercase tracking-widest opacity-40 font-bold mb-4">系统人格 (System Instruction)</label>
+                            <textarea v-model="aiConfig.systemPrompt" rows="8" class="w-full bg-white/[0.03] rounded-2xl p-4 text-sm outline-none border border-white/5 focus:border-blue-500/50 transition-all resize-none leading-relaxed" placeholder="例如：你是一个温暖的岛屿守护者..."></textarea>
+                            <p class="mt-3 text-[10px] opacity-20 italic">提示：此内容将作为 AI 回响的基本行为准则。</p>
+                        </div>
+                        
+                        <div class="glass p-8 rounded-[2.5rem] border border-white/5">
+                            <label class="block text-[10px] uppercase tracking-widest opacity-40 font-bold mb-6">响应模型 (Model Version)</label>
+                            <div class="flex gap-3">
+                                <button class="flex-1 py-3 bg-blue-600 rounded-xl text-xs font-bold shadow-lg shadow-blue-600/20">Gemini 2.5 Flash</button>
+                                <button disabled class="flex-1 py-3 glass rounded-xl text-xs font-bold opacity-20 cursor-not-allowed">GPT-4 (Coming)</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 参数设置 -->
+                    <div class="space-y-6">
+                        <div class="glass p-8 rounded-[2.5rem] border border-white/5">
+                            <div class="flex items-center justify-between mb-8">
+                                <label class="text-[10px] uppercase tracking-widest opacity-40 font-bold">Temperature (随机性)</label>
+                                <span class="text-blue-400 font-mono text-sm">{{ aiConfig.temperature }}</span>
+                            </div>
+                            <input type="range" v-model.number="aiConfig.temperature" min="0" max="2" step="0.1" class="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer mb-2" />
+                            <div class="flex justify-between text-[8px] opacity-20 font-bold uppercase tracking-tighter">
+                                <span>精确/严谨</span>
+                                <span>平衡</span>
+                                <span>狂野/创意</span>
+                            </div>
+                        </div>
+
+                        <div class="glass p-8 rounded-[2.5rem] border border-white/5">
+                            <div class="flex items-center justify-between mb-8">
+                                <label class="text-[10px] uppercase tracking-widest opacity-40 font-bold">Max Output Tokens</label>
+                                <span class="text-blue-400 font-mono text-sm">{{ aiConfig.maxTokens }}</span>
+                            </div>
+                            <input type="range" v-model.number="aiConfig.maxTokens" min="50" max="500" step="10" class="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer" />
+                        </div>
+
+                        <div class="glass p-8 rounded-[2.5rem] border border-white/5">
+                            <label class="block text-[10px] uppercase tracking-widest opacity-40 font-bold mb-4">响应触发规则</label>
+                            <div class="space-y-3">
+                                <div class="flex items-center justify-between p-3 rounded-xl bg-white/[0.02]">
+                                    <span class="text-xs opacity-60">自动回响新留言</span>
+                                    <div @click="aiConfig.autoReply = !aiConfig.autoReply" class="w-10 h-5 rounded-full transition-all cursor-pointer relative" :class="aiConfig.autoReply ? 'bg-blue-600' : 'bg-white/10'">
+                                        <div class="absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-all" :style="{ transform: aiConfig.autoReply ? 'translateX(20px)' : 'none' }"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button @click="saveAIConfig" class="w-full py-4 bg-white text-blue-900 rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-blue-50 transition-all shadow-xl active:scale-95">
+                            保存 AI 配置到岛屿
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 删除弹窗 -->
+        <div v-if="deletingId" class="fixed inset-0 z-50 flex items-center justify-center p-6">
+            <div class="absolute inset-0 bg-black/80 backdrop-blur-sm" @click="deletingId = null"></div>
+            <div class="relative glass rounded-[2.5rem] p-10 max-w-sm w-full text-center border border-white/10">
+                <h4 class="text-xl font-bold mb-2 text-white">确定抹除思绪？</h4>
+                <p class="text-sm opacity-40 mb-8">此操作将永久从 Firestore 中移除。</p>
+                <div class="flex gap-4">
+                    <button @click="deletingId = null" class="flex-1 py-4 glass rounded-2xl text-xs font-bold">取消</button>
+                    <button @click="handleDelete" class="flex-1 py-4 bg-red-600 rounded-2xl text-xs font-bold text-white">确认</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+        import { getFirestore, collection, query, onSnapshot, doc, deleteDoc, setDoc, getDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+
+        const { createApp, ref, computed, onMounted } = Vue;
+
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'blue-island-v2-reborn';
+
+        createApp({
+            setup() {
+                const currentTab = ref('stats');
+                const user = ref(null);
+                const messages = ref([]);
+                const filterText = ref('');
+                const deletingId = ref(null);
+                const saveStatus = ref('');
+
+                // AI 配置状态
+                const aiConfig = ref({
+                    systemPrompt: '你是一个细腻温暖、充满同情心的岛屿守护灵。面对人们投递的留言，请给予治愈、轻盈且带有文学美感的回响，回复请保持在100字以内。',
+                    temperature: 0.7,
+                    maxTokens: 200,
+                    autoReply: true
+                });
+
+                const tabTitle = computed(() => {
+                    const titles = { stats: '岛屿脉动', messages: '思绪审阅', ai: '智能核心' };
+                    return titles[currentTab.value];
+                });
+
+                onMounted(async () => {
+                    const initAuth = async () => {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    };
+                    await initAuth();
+                    onAuthStateChanged(auth, u => {
+                        user.value = u;
+                        if (u) {
+                            listenMessages();
+                            loadAIConfig();
+                        }
+                    });
+                });
+
+                const listenMessages = () => {
+                    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'messages'));
+                    onSnapshot(q, (snapshot) => {
+                        messages.value = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+                            .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+                    }, (err) => console.error("Message Snapshot error:", err));
+                };
+
+                const loadAIConfig = async () => {
+                    // 修复：确保文档路径为偶数段 (6段)
+                    // 原路径: artifacts/{appId}/public/data/aiSettings (5段 - 报错)
+                    // 新路径: artifacts/{appId}/public/data/settings/aiConfig (6段 - 正确)
+                    try {
+                        const configRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'aiConfig');
+                        const snap = await getDoc(configRef);
+                        if (snap.exists()) {
+                            aiConfig.value = { ...aiConfig.value, ...snap.data() };
+                        }
+                    } catch (e) {
+                        console.error("Load Config Error:", e);
+                    }
+                };
+
+                const saveAIConfig = async () => {
+                    if (!user.value) return;
+                    saveStatus.value = '正在上传配置...';
+                    try {
+                        const configRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'aiConfig');
+                        await setDoc(configRef, aiConfig.value);
+                        saveStatus.value = '配置已同步';
+                        setTimeout(() => saveStatus.value = '', 3000);
+                    } catch (e) {
+                        saveStatus.value = '保存失败';
+                        console.error("Save Config Error:", e);
+                    }
+                };
+
+                const totalLikes = computed(() => messages.value.reduce((acc, curr) => acc + (curr.likes || 0), 0));
+                const aiEchoCount = computed(() => messages.value.filter(m => m.echo || m.mood).length);
+                const filteredMessages = computed(() => {
+                    if (!filterText.value) return messages.value;
+                    const ft = filterText.value.toLowerCase();
+                    return messages.value.filter(m => m.content.toLowerCase().includes(ft) || m.author.toLowerCase().includes(ft));
+                });
+
+                const confirmDelete = (id) => { deletingId.value = id; };
+                const handleDelete = async () => {
+                    if (!deletingId.value) return;
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'messages', deletingId.value));
+                    deletingId.value = null;
+                };
+
+                const formatTime = (ts) => ts ? new Date(ts.seconds * 1000).toLocaleString() : '...';
+
+                return {
+                    currentTab, tabTitle, user, messages, filterText, deletingId,
+                    aiConfig, saveAIConfig, saveStatus,
+                    totalLikes, aiEchoCount, filteredMessages,
+                    confirmDelete, handleDelete, formatTime
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

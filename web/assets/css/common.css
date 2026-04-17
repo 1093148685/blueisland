@@ -1,0 +1,304 @@
+/* 通用样式 */
+body {
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background-image: url('/assets/images/background1.jpg');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    background-color: #ffffff;
+}
+
+/* 头部样式 */
+header {
+    margin: 15px;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+}
+
+header img {
+    width: 100px;
+    height: 100px;
+    border-radius: 60px;
+    cursor: pointer;
+}
+
+header p {
+    margin-left: 15px;
+    text-align: center;
+    color: rgb(70, 113, 173);
+    font-size: 1em;
+    font-family: '微软雅黑', Arial, sans-serif;
+}
+
+/* 内容布局样式 */
+.container {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 20px;
+    flex: 1;
+}
+
+.message-form {
+    width: 275px;
+    margin: 10 auto;
+    padding: 20px;
+    background-color: rgb(59, 101, 128);
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+label {
+    display: block;
+    margin-bottom: 8px;
+    color: #fff;
+}
+
+textarea, input[type="text"], input[type="number"] {
+    width: 95%;
+    padding: 10px;
+    border: 1px solid;
+    border-radius: 4px;
+    font-size: 13px;
+    background: transparent;
+    color: #fff;
+}
+
+input:focus, textarea:focus {
+    outline: none;
+    border-color: inherit;
+    box-shadow: none;
+}
+
+textarea {
+    max-height: 200px;
+    min-height: 150px;
+    resize: vertical;
+}
+
+/* 字数统计 */
+#wordCount {
+    text-align: right;
+    color: #666;
+    font-size: 0.8em;
+    margin-top: 5px;
+}
+
+#wordCount.limit-exceeded {
+    color: red;
+}
+
+#anonymousAvatars {
+    display: flex;
+    flex-direction: row;
+}
+
+.avatar-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin-top: 10px;
+    max-height: 80px;
+    overflow-y: auto;
+}
+
+.avatar-option {
+    width: 25px;
+    height: 25px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.3s;
+}
+
+.avatar-option:hover, .avatar-option.selected {
+    border-color: #2980b9;
+}
+
+.qq-avatar-container {
+    margin-top: 15px;
+    display: none;
+    height: 80px;
+}
+
+#qqNumber {
+    width: calc(100% - 100px);
+    margin-right: 10px;
+    color: #333;
+}
+
+#fetchQQAvatar {
+    padding: 10px 15px;
+    background-color: rgb(70, 113, 173);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    position: relative;
+}
+
+#fetchQQAvatar:hover {
+    background-color: #69b0d7;
+}
+
+#fetchQQAvatar.loading::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 16px;
+    height: 16px;
+    margin: -8px 0 0 -8px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+#fetchQQAvatar.loading {
+    color: transparent;
+    pointer-events: none;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.qq-avatar-preview {
+    width: 25px;
+    height: 25px;
+    border-radius: 50%;
+    margin-top: 10px;
+    display: none;
+}
+
+.avatar-toggle {
+    margin: 15px 0;
+}
+
+.toggle-btn {
+    background: rgba(255, 255, 255, 0.5);
+    border: none;
+    padding: 8px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-right: 10px;
+    color: #333;
+}
+
+.toggle-btn.active {
+    background-color: rgb(70, 113, 173);
+    color: white;
+}
+
+.submit-btn {
+    background-color: rgb(70, 113, 173);
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    width: 100%;
+    transition: background-color 0.3s;
+}
+
+.submit-btn:hover {
+    background-color: #69b0d7;
+}
+
+.submit-btn:disabled {
+    opacity: 0.8;
+    cursor: not-allowed;
+}
+
+.loading-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 0.8s linear infinite;
+    margin-right: 8px;
+    vertical-align: middle;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.status-message {
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 4px;
+    display: none;
+}
+
+.success {
+    background-color: #e6f4ea;
+    color: #34a853;
+}
+
+.error {
+    background-color: #fce8e6;
+    color: #d93025;
+    font-size: 13px;
+}
+
+.error-message {
+    color: #ff6b6b;
+    font-size: 0.8em;
+    margin-top: 4px;
+    padding: 4px;
+    display: none;
+    font-style: italic;
+}
+
+.error-message.show {
+    display: block;
+}
+
+.error-message i {
+    color: #ffa500;
+}
+
+.queryImg {
+    position: fixed;
+    bottom: 45px;
+    right: 45px;
+    z-index: 1000;
+}
+
+.queryImg img {
+    width: 60px;
+    height: 60px;
+    background-size: 16px;
+    border-radius: 30px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+/* 底部样式 */
+footer {
+    text-align: center;
+    padding: 5px;
+}
+
+footer p {
+    text-align: center;
+    margin-top: 30px;
+    color: #666;
+    font-family: '楷体', 'STKaiti', serif;
+}

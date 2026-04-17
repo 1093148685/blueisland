@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blue 岛 - 智能数据与管理中心</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js for Visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #020617; color: #f8fafc; margin: 0; }
+        .glass { background: rgba(30, 41, 59, 0.5); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.08); }
+        .card-shadow { box-shadow: 0 8px 32px -4px rgba(0, 0, 0, 0.3); }
+        .tab-active { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); }
+        .word-cloud-container { position: relative; width: 100%; height: 300px; overflow: hidden; }
+        .word-tag { position: absolute; cursor: default; transition: all 0.3s ease; white-space: nowrap; }
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+    </style>
+</head>
+<body>
+    <div id="app" class="flex min-h-screen">
+        <!-- Sidebar -->
+        <aside class="w-64 glass border-r border-white/5 fixed h-full z-30 hidden lg:block">
+            <div class="p-8">
+                <div class="flex items-center gap-3 mb-10">
+                    <div class="w-10 h-10 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
+                    </div>
+                    <span class="font-bold text-xl tracking-tight">Blue 岛</span>
+                </div>
+                
+                <nav class="space-y-2">
+                    <button @click="currentTab = 'dashboard'" :class="currentTab === 'dashboard' ? 'tab-active' : 'text-slate-400 hover:text-white'" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm">
+                        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+                        仪表盘
+                    </button>
+                    <button @click="currentTab = 'messages'" :class="currentTab === 'messages' ? 'tab-active' : 'text-slate-400 hover:text-white'" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm">
+                        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                        留言管理
+                    </button>
+                    <button @click="currentTab = 'ai'" :class="currentTab === 'ai' ? 'tab-active' : 'text-slate-400 hover:text-white'" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm">
+                        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10H12V2z"/><path d="M12 2a10 10 0 0 1 10 10h-10V2z"/></svg>
+                        AI 核心
+                    </button>
+                    <button @click="currentTab = 'simulator'" :class="currentTab === 'simulator' ? 'tab-active' : 'text-slate-400 hover:text-white'" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm">
+                        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                        模拟沙盒
+                    </button>
+                </nav>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 lg:ml-64 p-6 lg:p-10">
+            <!-- Header -->
+            <header class="flex items-center justify-between mb-10">
+                <div>
+                    <h2 class="text-2xl font-bold">{{ tabName }}</h2>
+                    <p class="text-slate-500 text-sm">岛屿最后同步时间: {{ lastSync }}</p>
+                </div>
+                <div class="flex items-center gap-4">
+                    <span v-if="loading" class="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"></span>
+                    <div class="px-3 py-1 bg-blue-500/10 text-blue-400 text-[10px] font-bold uppercase tracking-widest rounded-full border border-blue-500/20">Live Connected</div>
+                </div>
+            </header>
+
+            <!-- 1. Dashboard Tab -->
+            <div v-if="currentTab === 'dashboard'" class="space-y-8 animate-in fade-in duration-500">
+                <!-- Stats Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="glass p-6 rounded-3xl card-shadow">
+                        <p class="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">总留言数</p>
+                        <div class="flex items-end justify-between">
+                            <h3 class="text-4xl font-bold">{{ messages.length }}</h3>
+                            <span class="text-green-400 text-xs font-medium">+{{ messages.length }} Total</span>
+                        </div>
+                    </div>
+                    <div class="glass p-6 rounded-3xl card-shadow border-red-500/10">
+                        <p class="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">AI 拦截违规</p>
+                        <div class="flex items-end justify-between">
+                            <h3 class="text-4xl font-bold text-red-400">{{ violatedCount }}</h3>
+                            <span class="text-red-400/50 text-xs font-medium">{{ Math.round((violatedCount/messages.length)*100) || 0 }}% 拦截率</span>
+                        </div>
+                    </div>
+                    <div class="glass p-6 rounded-3xl card-shadow border-blue-500/10">
+                        <p class="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">活跃用户</p>
+                        <div class="flex items-end justify-between">
+                            <h3 class="text-4xl font-bold text-blue-400">{{ activeUsersCount }}</h3>
+                            <span class="text-blue-400/50 text-xs font-medium">Unique IDs</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <!-- Word Cloud Component -->
+                    <div class="glass p-8 rounded-[2.5rem] card-shadow">
+                        <div class="flex justify-between items-center mb-6">
+                            <h4 class="font-bold">语义词云图</h4>
+                            <button @click="generateCloud" class="text-[10px] text-blue-400 hover:text-blue-300 uppercase tracking-widest font-bold">刷新热词</button>
+                        </div>
+                        <div class="word-cloud-container bg-black/20 rounded-2xl flex items-center justify-center">
+                            <div v-for="(word, index) in cloudWords" :key="index" class="word-tag" 
+                                 :style="{ 
+                                    fontSize: word.size + 'px', 
+                                    color: word.color, 
+                                    left: word.x + '%', 
+                                    top: word.y + '%',
+                                    opacity: word.opacity,
+                                    fontWeight: word.size > 20 ? '700' : '400'
+                                 }">
+                                {{ word.text }}
+                            </div>
+                            <div v-if="cloudWords.length === 0" class="text-slate-500 text-sm">留言不足，无法生成词云</div>
+                        </div>
+                    </div>
+
+                    <!-- Health Chart -->
+                    <div class="glass p-8 rounded-[2.5rem] card-shadow">
+                        <h4 class="font-bold mb-6">内容合规性概览</h4>
+                        <div class="h-[300px] flex items-center justify-center">
+                            <canvas id="healthChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Message Management -->
+            <div v-else-if="currentTab === 'messages'" class="space-y-4">
+                <div v-for="msg in messages" :key="msg.id" class="glass rounded-3xl p-6 border border-white/5 hover:border-blue-500/30 transition-all group">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-500 flex items-center justify-center text-[10px] font-bold">
+                                {{ msg.author?.substring(0,1) || 'U' }}
+                            </div>
+                            <div>
+                                <p class="text-sm font-bold text-white/90">{{ msg.author }}</p>
+                                <p class="text-[10px] text-slate-500">{{ formatTime(msg.createdAt) }}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span v-if="msg.isViolated" class="px-2 py-0.5 bg-red-500/20 text-red-400 text-[9px] font-bold rounded uppercase">Violated</span>
+                            <button @click="deleteMsg(msg.id)" class="opacity-0 group-hover:opacity-100 p-2 text-slate-500 hover:text-red-400 transition-all">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <textarea v-model="msg.content" @change="updateMsg(msg)" class="w-full bg-black/20 rounded-xl p-3 text-sm border border-transparent focus:border-blue-500/30 outline-none resize-none transition-all" rows="2"></textarea>
+                    <p v-if="msg.auditReason" class="mt-2 text-[10px] text-red-400/80 italic font-medium">⚠️ {{ msg.auditReason }}</p>
+                </div>
+            </div>
+
+            <!-- 3. AI Config -->
+            <div v-else-if="currentTab === 'ai'" class="max-w-4xl space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="glass p-8 rounded-[2.5rem]">
+                        <h4 class="text-xs font-bold uppercase tracking-widest text-blue-400 mb-4">核心人格</h4>
+                        <textarea v-model="aiConfig.systemPrompt" rows="6" class="w-full bg-white/5 rounded-2xl p-4 text-sm outline-none border border-white/5 focus:border-blue-500/50 transition-all"></textarea>
+                    </div>
+                    <div class="glass p-8 rounded-[2.5rem] flex flex-col">
+                        <h4 class="text-xs font-bold uppercase tracking-widest text-blue-400 mb-4">审核策略</h4>
+                        <textarea v-model="aiConfig.auditPrompt" rows="6" class="w-full bg-white/5 rounded-2xl p-4 text-sm outline-none border border-white/5 focus:border-blue-500/50 transition-all flex-1"></textarea>
+                    </div>
+                </div>
+                <div class="glass p-6 rounded-[2.5rem] flex items-center justify-between">
+                    <div class="flex items-center gap-4">
+                        <div @click="aiConfig.autoAudit = !aiConfig.autoAudit" class="w-12 h-6 rounded-full relative cursor-pointer transition-all" :class="aiConfig.autoAudit ? 'bg-blue-600' : 'bg-slate-700'">
+                            <div class="absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-all" :style="{ transform: aiConfig.autoAudit ? 'translateX(24px)' : 'none' }"></div>
+                        </div>
+                        <span class="text-sm font-medium">启用 AI 实时审核流</span>
+                    </div>
+                    <button @click="saveSettings" class="px-8 py-3 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold text-xs uppercase tracking-widest transition-all">保存配置</button>
+                </div>
+            </div>
+
+            <!-- 4. Simulator -->
+            <div v-else-if="currentTab === 'simulator'" class="max-w-xl mx-auto glass p-10 rounded-[3rem] card-shadow">
+                <div class="text-center mb-8">
+                    <h3 class="text-xl font-bold">模拟发帖测试</h3>
+                    <p class="text-slate-500 text-xs mt-2">测试当前的 AI 审核和人格响应</p>
+                </div>
+                <div class="space-y-4">
+                    <input v-model="sim.author" type="text" placeholder="模拟作者" class="w-full bg-white/5 rounded-2xl p-4 text-sm outline-none border border-white/5" />
+                    <textarea v-model="sim.content" placeholder="输入留言内容，看看 AI 如何反应..." rows="5" class="w-full bg-white/5 rounded-2xl p-4 text-sm outline-none border border-white/5"></textarea>
+                    <button @click="postSim" :disabled="simulating" class="w-full py-4 bg-white text-black rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-slate-200 disabled:opacity-50 transition-all">
+                        {{ simulating ? 'AI 处理中...' : '提交模拟留言' }}
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+        import { getFirestore, collection, query, onSnapshot, doc, setDoc, getDoc, updateDoc, addDoc, deleteDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+
+        const { createApp, ref, computed, onMounted, watch } = Vue;
+
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'blue-island-analytics-v1';
+        const apiKey = "";
+
+        createApp({
+            setup() {
+                const currentTab = ref('dashboard');
+                const messages = ref([]);
+                const loading = ref(true);
+                const simulating = ref(false);
+                const lastSync = ref('--:--');
+                const cloudWords = ref([]);
+                let chartInstance = null;
+
+                const aiConfig = ref({
+                    systemPrompt: "你是岛屿守护灵，语气治愈且神秘。",
+                    auditPrompt: "如果是违规内容（色情、暴力、仇恨言论），请输出具体的违规原因；如果是安全的，仅输出 'safe'。",
+                    autoAudit: true
+                });
+
+                const sim = ref({ author: 'Explorer_' + Math.floor(Math.random()*99), content: '' });
+
+                const tabName = computed(() => {
+                    const map = { dashboard: '数据仪表盘', messages: '留言管理', ai: 'AI 核心配置', simulator: '模拟沙盒' };
+                    return map[currentTab.value];
+                });
+
+                const violatedCount = computed(() => messages.value.filter(m => m.isViolated).length);
+                const activeUsersCount = computed(() => new Set(messages.value.map(m => m.author)).size);
+
+                onMounted(async () => {
+                    const initAuth = async () => {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    };
+                    await initAuth();
+                    
+                    onAuthStateChanged(auth, u => {
+                        if (u) {
+                            fetchMessages();
+                            fetchSettings();
+                        }
+                    });
+                });
+
+                const fetchMessages = () => {
+                    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'messages'));
+                    onSnapshot(q, (snap) => {
+                        messages.value = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+                            .sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+                        loading.value = false;
+                        lastSync.value = new Date().toLocaleTimeString();
+                        
+                        if (currentTab.value === 'dashboard') {
+                            generateCloud();
+                            updateChart();
+                        }
+                    }, (err) => console.error(err));
+                };
+
+                const fetchSettings = async () => {
+                    const snap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'aiConfig'));
+                    if (snap.exists()) aiConfig.value = { ...aiConfig.value, ...snap.data() };
+                };
+
+                const saveSettings = async () => {
+                    loading.value = true;
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'aiConfig'), aiConfig.value);
+                    loading.value = false;
+                };
+
+                const postSim = async () => {
+                    if (!sim.value.content) return;
+                    simulating.value = true;
+                    let isViolated = false;
+                    let auditReason = "";
+
+                    if (aiConfig.value.autoAudit) {
+                        try {
+                            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    contents: [{ parts: [{ text: `审核规则: ${aiConfig.value.auditPrompt}\n内容: ${sim.value.content}` }] }]
+                                })
+                            });
+                            const data = await res.json();
+                            const resText = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+                            if (resText.toLowerCase() !== 'safe') {
+                                isViolated = true;
+                                auditReason = resText;
+                            }
+                        } catch (e) { console.error(e); }
+                    }
+
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'messages'), {
+                        ...sim.value,
+                        isViolated,
+                        auditReason,
+                        createdAt: serverTimestamp()
+                    });
+
+                    sim.value.content = '';
+                    simulating.value = false;
+                    currentTab.value = 'messages';
+                };
+
+                const updateMsg = async (msg) => {
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'messages', msg.id), { content: msg.content });
+                };
+
+                const deleteMsg = async (id) => {
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'messages', id));
+                };
+
+                const generateCloud = () => {
+                    const text = messages.value.map(m => m.content).join(' ');
+                    // Simple word splitting for demo (Chinese splitting normally needs a library, here we simulate)
+                    const words = text.split(/[\s,，。！!？?]/).filter(w => w.length > 1);
+                    const freq = {};
+                    words.forEach(w => freq[w] = (freq[w] || 0) + 1);
+                    
+                    const sorted = Object.entries(freq).sort((a,b) => b[1] - a[1]).slice(0, 20);
+                    const colors = ['#60a5fa', '#34d399', '#f472b6', '#fbbf24', '#a78bfa', '#f87171'];
+                    
+                    cloudWords.value = sorted.map(([text, count]) => ({
+                        text,
+                        size: Math.min(40, 12 + count * 5),
+                        color: colors[Math.floor(Math.random() * colors.length)],
+                        x: 10 + Math.random() * 80,
+                        y: 10 + Math.random() * 80,
+                        opacity: 0.6 + (count/sorted[0][1]) * 0.4
+                    }));
+                };
+
+                const updateChart = () => {
+                    const ctx = document.getElementById('healthChart');
+                    if (!ctx) return;
+                    
+                    const data = {
+                        labels: ['安全留言', '已拦截违规'],
+                        datasets: [{
+                            data: [messages.value.length - violatedCount.value, violatedCount.value],
+                            backgroundColor: ['rgba(59, 130, 246, 0.6)', 'rgba(239, 68, 68, 0.6)'],
+                            borderColor: ['#3b82f6', '#ef4444'],
+                            borderWidth: 2
+                        }]
+                    };
+
+                    if (chartInstance) chartInstance.destroy();
+                    chartInstance = new Chart(ctx, {
+                        type: 'doughnut',
+                        data: data,
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { position: 'bottom', labels: { color: '#94a3b8', boxWidth: 12, padding: 20 } }
+                            },
+                            cutout: '70%'
+                        }
+                    });
+                };
+
+                watch(currentTab, (newTab) => {
+                    if (newTab === 'dashboard') {
+                        setTimeout(() => {
+                            generateCloud();
+                            updateChart();
+                        }, 100);
+                    }
+                });
+
+                const formatTime = (ts) => ts ? new Date(ts.seconds * 1000).toLocaleString() : 'Just now';
+
+                return {
+                    currentTab, messages, loading, simulating, aiConfig, sim, tabName, lastSync,
+                    violatedCount, activeUsersCount, cloudWords,
+                    saveSettings, postSim, updateMsg, deleteMsg, generateCloud, formatTime
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

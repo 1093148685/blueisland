@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir \"D:\\\\VisualStudio\\\\projects\\\\Weblog.Core\\\\Blue岛\")",
+      "Read(//d D:/vscode-allproject/liuyanban-fastapi/web/**)",
+      "Bash(npm install:*)",
+      "Bash(rm -rf node_modules/.vite)",
+      "Bash(npm run:*)",
+      "Bash(rm:*)"
+    ]
+  }
+}

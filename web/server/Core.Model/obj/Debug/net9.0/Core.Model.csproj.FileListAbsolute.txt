@@ -1,0 +1,15 @@
+D:\vscode-allproject\liuyanban-fastapi\web\web\server\Core.Model\obj\Debug\net9.0\Core.Model.csproj.AssemblyReference.cache
+D:\vscode-allproject\liuyanban-fastapi\web\web\server\Core.Model\obj\Debug\net9.0\Core.Model.GeneratedMSBuildEditorConfig.editorconfig
+D:\vscode-allproject\liuyanban-fastapi\web\web\server\Core.Model\obj\Debug\net9.0\Core.Model.AssemblyInfoInputs.cache
+D:\vscode-allproject\liuyanban-fastapi\web\web\server\Core.Model\obj\Debug\net9.0\Core.Model.AssemblyInfo.cs
+D:\vscode-allproject\liuyanban-fastapi\web\web\server\Core.Model\obj\Debug\net9.0\Core.Model.csproj.CoreCompileInputs.cache
+D:\vscode-allproject\liuyanban-fastapi\web\web\server\Core.Model\bin\Debug\net9.0\Core.Model.deps.json
+D:\vscode-allproject\liuyanban-fastapi\web\web\server\Core.Model\bin\Debug\net9.0\Core.Model.dll
+D:\vscode-allproject\liuyanban-fastapi\web\web\server\Core.Model\bin\Debug\net9.0\Core.Model.pdb
+D:\vscode-allproject\liuyanban-fastapi\web\web\server\Core.Model\bin\Debug\net9.0\Core.Common.dll
+D:\vscode-allproject\liuyanban-fastapi\web\web\server\Core.Model\bin\Debug\net9.0\Core.Common.pdb
+D:\vscode-allproject\liuyanban-fastapi\web\web\server\Core.Model\obj\Debug\net9.0\Core.Model.csproj.Up2Date
+D:\vscode-allproject\liuyanban-fastapi\web\web\server\Core.Model\obj\Debug\net9.0\Core.Model.dll
+D:\vscode-allproject\liuyanban-fastapi\web\web\server\Core.Model\obj\Debug\net9.0\refint\Core.Model.dll
+D:\vscode-allproject\liuyanban-fastapi\web\web\server\Core.Model\obj\Debug\net9.0\Core.Model.pdb
+D:\vscode-allproject\liuyanban-fastapi\web\web\server\Core.Model\obj\Debug\net9.0\ref\Core.Model.dll
