@@ -77,11 +77,11 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // 音乐文件服务
-var musicPath = Path.Combine(builder.Environment.ContentRootPath, "..", "..", "assets", "music");
+var musicPath = Path.Combine(builder.Environment.ContentRootPath, "..", "assets", "music");
 Console.WriteLine($"[DEBUG] Music path: {musicPath}, exists: {Directory.Exists(musicPath)}");
 
 // 白噪音文件服务
-var ambientPath = Path.Combine(builder.Environment.ContentRootPath, "..", "..", "assets", "ambient");
+var ambientPath = Path.Combine(builder.Environment.ContentRootPath, "..", "assets", "ambient");
 app.MapGet("/assets/ambient/{file}", async (string file, HttpContext context) =>
 {
     var filePath = Path.Combine(ambientPath, file);
