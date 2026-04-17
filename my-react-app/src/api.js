@@ -54,6 +54,11 @@ export const messageApi = {
   updateMessage: (id, data) => api.put(`/messages/admin/${id}`, data),
 };
 
+// 岛屿之灵相关
+export const spiritApi = {
+  chat: (message) => api.post('/spirit/chat', { message }),
+};
+
 // AI 模型相关
 export const aiModelApi = {
   getAiModels: () => api.get('/ai-models'),

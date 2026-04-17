@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Home, Lock, Music, Play, Pause, SkipForward, SkipBack, MessageCircleHeart, Ghost, Waves, CloudRain, Flame, Sparkles, Wind } from 'lucide-react';
-import { messageApi, aiModelApi } from '../api';
+import { Search, Home, Lock, Music, Play, Pause, SkipForward, SkipBack, MessageCircleHeart, Ghost, Waves, CloudRain, Flame, Sparkles, Wind, Bot, Send, X } from 'lucide-react';
+import { messageApi, aiModelApi, spiritApi } from '../api';
 
 const MUSIC_BASE_URL = 'http://localhost:5170/assets/music';
 const AMBIENT_BASE_URL = 'http://localhost:5170/assets/ambient';
@@ -56,6 +56,12 @@ export default function HomePage() {
 
   // 白噪音状态
   const [ambientSounds, setAmbientSounds] = useState({ waves: false, rain: false, fire: false });
+
+  // 岛屿之灵状态
+  const [isSpiritOpen, setIsSpiritOpen] = useState(false);
+  const [spiritChat, setSpiritChat] = useState([]);
+  const [spiritInput, setSpiritInput] = useState('');
+  const [isSpiritTyping, setIsSpiritTyping] = useState(false);
 
   // 加载AI审核配置
   useEffect(() => {
@@ -173,6 +179,28 @@ export default function HomePage() {
       }
     } catch (error) {
       console.error('分析岛屿情绪失败:', error);
+    }
+  };
+
+  // 岛屿之灵对话
+  const handleSpiritTalk = async () => {
+    if (!spiritInput.trim()) return;
+    const msg = spiritInput;
+    setSpiritChat(prev => [...prev, { role: 'user', text: msg }]);
+    setSpiritInput('');
+    setIsSpiritTyping(true);
+
+    try {
+      const result = await spiritApi.chat(msg);
+      setIsSpiritTyping(false);
+      if (result.code === 200 && result.data?.reply) {
+        setSpiritChat(prev => [...prev, { role: 'spirit', text: result.data.reply }]);
+      } else {
+        setSpiritChat(prev => [...prev, { role: 'spirit', text: '岛屿之灵正在沉思...' }]);
+      }
+    } catch (error) {
+      setIsSpiritTyping(false);
+      setSpiritChat(prev => [...prev, { role: 'spirit', text: '岛屿之灵沉睡中...' }]);
     }
   };
 
@@ -325,6 +353,13 @@ export default function HomePage() {
                 className="w-full py-4 bg-blue-400/20 backdrop-blur-md rounded-2xl font-medium tracking-widest hover:bg-blue-400/40 transition-all shadow-lg border border-white/10"
               >
                 查询留言
+              </button>
+              <button
+                onClick={() => setIsSpiritOpen(true)}
+                className="w-full py-4 bg-indigo-500/20 backdrop-blur-md rounded-2xl font-medium tracking-widest hover:bg-indigo-500/40 transition-all shadow-lg border border-white/10 flex items-center justify-center gap-3"
+              >
+                <Bot className="text-indigo-400" size={18} />
+                <span>对话岛屿之灵</span>
               </button>
             </div>
             <div className="fixed bottom-10 opacity-30 text-[10px] tracking-widest font-serif italic">
@@ -608,6 +643,59 @@ export default function HomePage() {
           <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-400 rounded-full animate-ping"></div>
         )}
       </button>
+
+      {/* 岛屿之灵 对话浮层 */}
+      <div className={`fixed inset-0 z-[100] transition-all duration-700 ${isSpiritOpen ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'}`}>
+        <div className="absolute inset-0 bg-slate-950/95 backdrop-blur-3xl flex flex-col">
+          <div className="p-6 flex justify-between items-center border-b border-white/5">
+            <div className="flex items-center gap-3">
+              <Sparkles className="text-indigo-400 animate-pulse" />
+              <span className="text-sm tracking-widest font-bold font-serif">岛屿之灵</span>
+            </div>
+            <button onClick={() => setIsSpiritOpen(false)} className="p-3 bg-white/5 rounded-full hover:bg-white/10 transition-all">
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+            {spiritChat.length === 0 ? (
+              <div className="text-center py-12 opacity-40">
+                <Bot size={48} className="mx-auto mb-4 text-indigo-400" />
+                <div className="text-xs font-serif italic">岛屿之灵正在聆听你的心声...</div>
+              </div>
+            ) : (
+              spiritChat.map((msg, i) => (
+                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[85%] p-4 rounded-3xl text-xs leading-loose font-serif ${msg.role === 'user' ? 'bg-indigo-600 shadow-xl' : 'bg-white/5 border border-white/10 italic'}`}>
+                    {msg.text}
+                  </div>
+                </div>
+              ))
+            )}
+            {isSpiritTyping && (
+              <div className="text-xs opacity-40 animate-pulse font-serif italic">岛屿正在编织回响...</div>
+            )}
+          </div>
+
+          <div className="p-6 pb-8">
+            <div className="flex gap-4">
+              <input
+                value={spiritInput}
+                onChange={e => setSpiritInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSpiritTalk()}
+                placeholder="对岛屿说点什么..."
+                className="flex-1 bg-white/5 rounded-2xl px-5 py-3 text-xs outline-none border border-white/10 focus:border-indigo-500/50 transition-all"
+              />
+              <button
+                onClick={handleSpiritTalk}
+                className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg active:scale-90 transition-all hover:bg-indigo-500"
+              >
+                <Send size={18} />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@200;400&display=swap');
