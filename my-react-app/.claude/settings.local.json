@@ -4,7 +4,14 @@
       "Bash(npm install:*)",
       "Bash(npm run:*)",
       "Read(//d/vscode-allproject/liuyanban-fastapi/web/web/server/BlueIsland.Api/**)",
-      "Bash(dotnet build:*)"
+      "Bash(dotnet build:*)",
+      "Bash(git config *)",
+      "Bash(mv web/web/server server_backend)",
+      "Bash(rm -rf web)",
+      "Bash(mkdir -p server)",
+      "Bash(mv server_backend server/backend)",
+      "Bash(mv web/web/server ./server_backend_temp)",
+      "Bash(mv server_backend_temp server/backend)"
     ]
   }
 }
