@@ -317,6 +317,7 @@ export default function HomePage() {
   const [selectedAnonAvatar, setSelectedAnonAvatar] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [showBackToTop, setShowBackToTop] = useState(false);
   const [isAuditing, setIsAuditing] = useState(false);
   const [auditError, setAuditError] = useState('');
 
@@ -351,6 +352,15 @@ export default function HomePage() {
       setCurrentHour(new Date().getHours());
     }, 60000); // 每分钟检查一次
     return () => clearInterval(interval);
+  }, []);
+
+  // 监听滚动显示回到顶部按钮
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowBackToTop(window.scrollY > 500);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   // 切换白噪音
@@ -854,6 +864,14 @@ export default function HomePage() {
         {(isPlaying || Object.values(ambientSounds).some(v => v)) && !isMusicOpen && (
           <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-400 rounded-full animate-ping"></div>
         )}
+      </button>
+
+      {/* 回到顶部按钮 */}
+      <button
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        className={`fixed bottom-28 left-6 w-12 h-12 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 flex items-center justify-center z-50 transition-all duration-300 shadow-xl ${showBackToTop ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10 pointer-events-none'}`}
+      >
+        <div className="text-blue-300">↑</div>
       </button>
 
       {/* 岛屿之灵 对话浮层 */}
