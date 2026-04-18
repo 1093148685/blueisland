@@ -1,1 +1,14 @@
 @import "tailwindcss";
+
+/* 平滑滚动 */
+html {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 移动端滚动优化 */
+body {
+  overscroll-behavior-y: contain;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
