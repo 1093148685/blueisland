@@ -1,7 +1,7 @@
 # BlueIsland 留言板项目
 
 一个基于 React + .NET 的现代化留言板应用，支持匿名留言、暗号查询、AI 模型管理等功能。
-
+![Alt text](/txt/f2f8faf5de60060ec1f1f4bbec1aef1f.jpeg)
 ## 项目结构
 
 ```

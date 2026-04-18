@@ -9,6 +9,7 @@ export default function AdminPage() {
   const [messages, setMessages] = useState([]);
   const [aiModels, setAiModels] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
   const [testingModelId, setTestingModelId] = useState(null);
   const [editingMessage, setEditingMessage] = useState(null);
   const [editingModel, setEditingModel] = useState(null);
@@ -26,6 +27,10 @@ export default function AdminPage() {
 
   useEffect(() => {
     checkAuth();
+  }, []);
+
+  useEffect(() => {
+    if (!authChecked) return;
     if (activeTab === 'dashboard') {
       loadAuditStats();
     } else if (activeTab === 'messages') {
@@ -35,18 +40,25 @@ export default function AdminPage() {
     } else if (activeTab === 'ai-audit') {
       loadAiConfig();
     }
-  }, [activeTab]);
+  }, [activeTab, authChecked]);
 
   const checkAuth = async () => {
     const token = localStorage.getItem('token');
     if (!token) {
+      setAuthChecked(true);
       navigate('/login');
       return;
     }
     try {
-      await authApi.getUserInfo();
+      const result = await authApi.getUserInfo();
+      setAuthChecked(true);
+      if (result.code !== 200) {
+        localStorage.removeItem('token');
+        navigate('/login');
+      }
     } catch (error) {
-      navigate('/login');
+      setAuthChecked(true);
+      console.error('验证失败:', error);
     }
   };
 
@@ -192,6 +204,14 @@ export default function AdminPage() {
     localStorage.removeItem('user');
     navigate('/login');
   };
+
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#05162a] via-[#0a1f3d] to-[#05162a] flex items-center justify-center">
+        <div className="text-blue-100/60">验证中...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#05162a] via-[#0a1f3d] to-[#05162a] text-white">
