@@ -3,27 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { Search, Home, Lock, Music, Play, Pause, SkipForward, SkipBack, MessageCircleHeart, Ghost, Waves, CloudRain, Flame, Sparkles, Wind, Bot, Send, X } from 'lucide-react';
 import { messageApi, aiModelApi, spiritApi } from '../api';
 
-const MUSIC_BASE_URL = '/assets/music';
+const MUSIC_API = 'http://iwenwiki.com:3000';
 const AMBIENT_BASE_URL = '/assets/ambient';
 
-const rawPlaylist = [
-  "青花瓷-周杰伦.mp3",
-  "晴天-周杰伦.mp3",
-  "兰亭序-周杰伦.mp3",
-  "消愁-薛之谦&毛不易.mp3",
-  "有何不可-许嵩.mp3",
-  "玫瑰花的葬礼-许嵩.mp3",
+const playlist = [
+  { title: "青花瓷", artist: "周杰伦", url: `${MUSIC_API}/青花瓷-周杰伦.mp3` },
+  { title: "晴天", artist: "周杰伦", url: `${MUSIC_API}/晴天-周杰伦.mp3` },
+  { title: "兰亭序", artist: "周杰伦", url: `${MUSIC_API}/兰亭序-周杰伦.mp3` },
+  { title: "消愁", artist: "薛之谦&毛不易", url: `${MUSIC_API}/消愁-薛之谦&毛不易.mp3` },
+  { title: "有何不可", artist: "许嵩", url: `${MUSIC_API}/有何不可-许嵩.mp3` },
+  { title: "玫瑰花的葬礼", artist: "许嵩", url: `${MUSIC_API}/玫瑰花的葬礼-许嵩.mp3` },
 ];
-
-const playlist = rawPlaylist.map(file => {
-  const [namePart] = file.split('.mp3');
-  const lastDash = namePart.lastIndexOf('-');
-  return {
-    title: namePart.substring(0, lastDash),
-    artist: namePart.substring(lastDash + 1),
-    url: `${MUSIC_BASE_URL}/${encodeURIComponent(file)}`,
-  };
-});
 
 const anonAvatars = [
   "https://api.dicebear.com/7.x/lorelei/svg?seed=Midnight",
