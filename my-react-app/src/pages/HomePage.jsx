@@ -102,26 +102,6 @@ const IslandCanvas = () => {
       grad.addColorStop(1, '#0c2d52');
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, w, h);
-
-      const moonX = w * 0.2;
-      const moonY = h * 0.25;
-      const moonRadius = 50;
-
-      const moonGlow = ctx.createRadialGradient(moonX, moonY, 0, moonX, moonY, 150);
-      moonGlow.addColorStop(0, 'rgba(200, 230, 255, 0.15)');
-      moonGlow.addColorStop(1, 'rgba(200, 230, 255, 0)');
-      ctx.fillStyle = moonGlow;
-      ctx.beginPath();
-      ctx.arc(moonX, moonY, 150, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = '#eef6ff';
-      ctx.shadowBlur = 20;
-      ctx.shadowColor = '#fff';
-      ctx.beginPath();
-      ctx.arc(moonX, moonY, moonRadius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.shadowBlur = 0;
     };
 
     const drawMeteors = (time) => {
@@ -166,15 +146,6 @@ const IslandCanvas = () => {
         for (let x = 0; x <= w; x += 20) {
           const y = seaLevel + idx * 20 + Math.sin(x * layer.freq + time * layer.speed) * layer.amp;
           ctx.lineTo(x, y);
-
-          const moonX = w * 0.2;
-          const distToMoonLine = Math.abs(x - moonX);
-          if (distToMoonLine < 100 && Math.random() > 0.8) {
-            ctx.save();
-            ctx.fillStyle = `rgba(255, 255, 255, ${0.3 * (1 - distToMoonLine / 100)})`;
-            ctx.fillRect(x, y, 4, 1);
-            ctx.restore();
-          }
         }
         ctx.lineTo(w, h);
         ctx.fill();
