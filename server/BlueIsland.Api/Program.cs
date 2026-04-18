@@ -6,7 +6,8 @@ using Core.Model.Entities;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+var connectionString = Environment.GetEnvironmentVariable("CONNECTION_STRING")
+    ?? builder.Configuration.GetConnectionString("DefaultConnection")
     ?? "Server=localhost;Port=3306;Database=blueisland;User=root;Password=123456;";
 
 var jwtSecretKey = "BlueIsland.SecretKey.2024.Guestbook";
@@ -76,12 +77,18 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// 音乐文件服务
-var musicPath = Path.Combine(builder.Environment.ContentRootPath, "..", "assets", "music");
+// 音乐文件服务 - 容器环境下使用固定路径
+var musicPath = Path.GetFullPath(Path.Combine(
+    Directory.Exists("/app") ? "/app" : builder.Environment.ContentRootPath,
+    "assets", "music"
+));
 Console.WriteLine($"[DEBUG] Music path: {musicPath}, exists: {Directory.Exists(musicPath)}");
 
 // 白噪音文件服务
-var ambientPath = Path.Combine(builder.Environment.ContentRootPath, "..", "assets", "ambient");
+var ambientPath = Path.GetFullPath(Path.Combine(
+    Directory.Exists("/app") ? "/app" : builder.Environment.ContentRootPath,
+    "assets", "ambient"
+));
 app.MapGet("/assets/ambient/{file}", async (string file, HttpContext context) =>
 {
     var filePath = Path.Combine(ambientPath, file);

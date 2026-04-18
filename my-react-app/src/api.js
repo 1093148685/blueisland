@@ -77,4 +77,9 @@ export const aiModelApi = {
   getAuditLogs: (page, pageSize) => api.get(`/ai-config/logs?page=${page}&pageSize=${pageSize}`),
 };
 
+// 音乐搜索
+export const musicApi = {
+  search: (name) => api.get('https://api.apiopen.top/searchMusic', { params: { name } }),
+};
+
 export default api;

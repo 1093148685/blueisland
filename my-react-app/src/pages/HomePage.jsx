@@ -1,18 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Home, Lock, Music, Play, Pause, SkipForward, SkipBack, MessageCircleHeart, Ghost, Waves, CloudRain, Flame, Sparkles, Wind, Bot, Send, X } from 'lucide-react';
-import { messageApi, aiModelApi, spiritApi } from '../api';
+import { messageApi, aiModelApi, spiritApi, musicApi } from '../api';
 
-const MUSIC_API = 'http://iwenwiki.com:3000';
 const AMBIENT_BASE_URL = '/assets/ambient';
 
-const playlist = [
-  { title: "青花瓷", artist: "周杰伦", url: `${MUSIC_API}/青花瓷-周杰伦.mp3` },
-  { title: "晴天", artist: "周杰伦", url: `${MUSIC_API}/晴天-周杰伦.mp3` },
-  { title: "兰亭序", artist: "周杰伦", url: `${MUSIC_API}/兰亭序-周杰伦.mp3` },
-  { title: "消愁", artist: "薛之谦&毛不易", url: `${MUSIC_API}/消愁-薛之谦&毛不易.mp3` },
-  { title: "有何不可", artist: "许嵩", url: `${MUSIC_API}/有何不可-许嵩.mp3` },
-  { title: "玫瑰花的葬礼", artist: "许嵩", url: `${MUSIC_API}/玫瑰花的葬礼-许嵩.mp3` },
+const defaultPlaylist = [
+  { title: "青花瓷", artist: "周杰伦", url: "http://music.163.com/song/media/outer/url?id=185976" },
+  { title: "晴天", artist: "周杰伦", url: "http://music.163.com/song/media/outer/url?id=186855" },
+  { title: "兰亭序", artist: "周杰伦", url: "http://music.163.com/song/media/outer/url?id=190137" },
+  { title: "消愁", artist: "薛之谦&毛不易", url: "http://music.163.com/song/media/outer/url?id=441491454" },
+  { title: "有何不可", artist: "许嵩", url: "http://music.163.com/song/media/outer/url?id=167880" },
+  { title: "玫瑰花的葬礼", artist: "许嵩", url: "http://music.163.com/song/media/outer/url?id=167876" },
 ];
 
 const anonAvatars = [
@@ -247,6 +246,10 @@ export default function HomePage() {
   const [isMusicOpen, setIsMusicOpen] = useState(false);
   const [currentSongIndex, setCurrentSongIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [musicSearch, setMusicSearch] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [playlist, setPlaylist] = useState(defaultPlaylist);
   const [autoAuditEnabled, setAutoAuditEnabled] = useState(true);
   const [currentHour, setCurrentHour] = useState(new Date().getHours());
   const audioRef = useRef(null);
@@ -352,6 +355,33 @@ export default function HomePage() {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  // 搜索音乐
+  const handleMusicSearch = async () => {
+    if (!musicSearch.trim()) return;
+    setIsSearching(true);
+    try {
+      const res = await musicApi.search(musicSearch);
+      if (res.code === 200 && res.result) {
+        setSearchResults(res.result.slice(0, 8));
+      }
+    } catch (err) {
+      console.error('搜索失败:', err);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // 播放搜索到的歌曲
+  const playSearchedSong = (song) => {
+    const newPlaylist = [...playlist, { title: song.title, artist: song.author, url: song.url }];
+    setPlaylist(newPlaylist);
+    setCurrentSongIndex(newPlaylist.length - 1);
+    setIsPlaying(true);
+    setSearchResults([]);
+    setMusicSearch('');
+    setTimeout(() => audioRef.current?.play(), 100);
+  };
 
   // 切换白噪音
   const toggleAmbient = (type) => {
@@ -826,6 +856,34 @@ export default function HomePage() {
                     <Flame size={14}/> <span className="text-[8px]">篝火</span>
                   </button>
                </div>
+            </div>
+
+            {/* 音乐搜索 */}
+            <div className="p-3 border-t border-white/5">
+               <input
+                 type="text"
+                 value={musicSearch}
+                 onChange={(e) => setMusicSearch(e.target.value)}
+                 onKeyDown={(e) => {
+                   if (e.key === 'Enter' && musicSearch.trim()) {
+                     handleMusicSearch();
+                   }
+                 }}
+                 placeholder="搜索音乐..."
+                 className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs outline-none focus:border-blue-500/50"
+               />
+               {searchResults.length > 0 && (
+                 <div className="mt-2 max-h-32 overflow-y-auto custom-scrollbar space-y-1">
+                   {searchResults.map((song, i) => (
+                     <div key={i} onClick={() => playSearchedSong(song)} className="text-[9px] p-2 rounded-lg bg-white/5 hover:bg-white/10 cursor-pointer">
+                       <div className="flex justify-between">
+                         <span className="truncate">{song.title}</span>
+                         <span className="opacity-40">{song.author}</span>
+                       </div>
+                     </div>
+                   ))}
+                 </div>
+               )}
             </div>
 
             <div className="space-y-1 max-h-28 overflow-y-auto pr-2 custom-scrollbar">

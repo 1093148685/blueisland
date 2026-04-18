@@ -1,0 +1,449 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
+import { getFirestore, collection, addDoc, query, onSnapshot, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { 
+  Search, Send, Home, Music, Play, Pause, 
+  SkipForward, SkipBack, Moon, Star, Wind
+} from 'lucide-react';
+
+/**
+ * FIREBASE CONFIG
+ */
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'blue-island-v3-cinematic';
+
+const playlist = [
+  { title: "青花瓷", artist: "周杰伦" },
+  { title: "晴天", artist: "周杰伦" },
+  { title: "幻听", artist: "许嵩" },
+  { title: "消愁", artist: "毛不易" },
+  { title: "遥远的她", artist: "张学友" },
+];
+
+/**
+ * 极简粒子类 - 用于蓝眼泪效果
+ */
+class Particle {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.size = Math.random() * 2 + 1;
+    this.speedX = (Math.random() - 0.5) * 0.5;
+    this.speedY = (Math.random() - 0.5) * 0.5;
+    this.life = 1; // 透明度
+  }
+  update() {
+    this.x += this.speedX;
+    this.y += this.speedY;
+    this.life -= 0.005;
+  }
+}
+
+const IslandCanvas = () => {
+  const canvasRef = useRef(null);
+  const mouseRef = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    let animationFrameId;
+
+    let w, h;
+    const stars = [];
+    const meteors = [];
+    const particles = [];
+    const islandPoints = [];
+    
+    const init = () => {
+      w = canvas.width = window.innerWidth;
+      h = canvas.height = window.innerHeight;
+      
+      // 星星初始化
+      stars.length = 0;
+      for (let i = 0; i < 150; i++) {
+        stars.push({
+          x: Math.random() * w,
+          y: Math.random() * h * 0.8,
+          size: Math.random() * 1.5,
+          opacity: Math.random(),
+          blink: Math.random() * 0.05
+        });
+      }
+
+      // 岛屿轮廓 - 更加陡峭
+      islandPoints.length = 0;
+      const segments = 30;
+      for(let i=0; i<=segments; i++) {
+        const relX = i / segments;
+        let baseHeight = Math.sin(relX * Math.PI) * 80;
+        // 增加陡峭度
+        if (relX > 0.6 && relX < 0.8) baseHeight += 40; 
+        let noise = baseHeight + (Math.random() - 0.5) * 20;
+        if (i === 0 || i === segments) noise = 0;
+        islandPoints.push({ x: relX, y: noise });
+      }
+    };
+
+    const drawSky = (time) => {
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, '#020a1a');
+      grad.addColorStop(0.5, '#051b36');
+      grad.addColorStop(1, '#0c2d52');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+
+      // 绘制巨月
+      const moonX = w * 0.2;
+      const moonY = h * 0.25;
+      const moonRadius = 50;
+      
+      // 月晕
+      const moonGlow = ctx.createRadialGradient(moonX, moonY, 0, moonX, moonY, 150);
+      moonGlow.addColorStop(0, 'rgba(200, 230, 255, 0.15)');
+      moonGlow.addColorStop(1, 'rgba(200, 230, 255, 0)');
+      ctx.fillStyle = moonGlow;
+      ctx.beginPath();
+      ctx.arc(moonX, moonY, 150, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 月球本体
+      ctx.fillStyle = '#eef6ff';
+      ctx.shadowBlur = 20;
+      ctx.shadowColor = '#fff';
+      ctx.beginPath();
+      ctx.arc(moonX, moonY, moonRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    };
+
+    const drawMeteors = (time) => {
+      if (Math.random() < 0.005) {
+        meteors.push({
+          x: Math.random() * w,
+          y: 0,
+          len: Math.random() * 80 + 20,
+          speed: Math.random() * 10 + 5,
+          opacity: 1
+        });
+      }
+
+      meteors.forEach((m, i) => {
+        m.x += m.speed;
+        m.y += m.speed;
+        m.opacity -= 0.01;
+        if (m.opacity <= 0) meteors.splice(i, 1);
+
+        ctx.strokeStyle = `rgba(255, 255, 255, ${m.opacity})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(m.x, m.y);
+        ctx.lineTo(m.x - m.len, m.y - m.len);
+        ctx.stroke();
+      });
+    };
+
+    const drawSea = (time) => {
+      const seaLevel = h * 0.72;
+      
+      // 海浪分层
+      const layers = [
+        { color: '#0a2342', amp: 10, freq: 0.002, speed: 0.001 },
+        { color: '#061830', amp: 15, freq: 0.003, speed: 0.0008 },
+        { color: '#020c1a', amp: 12, freq: 0.0015, speed: 0.0005 }
+      ];
+
+      layers.forEach((layer, idx) => {
+        ctx.fillStyle = layer.color;
+        ctx.beginPath();
+        ctx.moveTo(0, h);
+        for (let x = 0; x <= w; x += 20) {
+          const y = seaLevel + idx * 20 + Math.sin(x * layer.freq + time * layer.speed) * layer.amp;
+          ctx.lineTo(x, y);
+          
+          // 月光在波浪上的反射 (Specular Highlight)
+          const moonX = w * 0.2;
+          const distToMoonLine = Math.abs(x - moonX);
+          if (distToMoonLine < 100 && Math.random() > 0.8) {
+             ctx.save();
+             ctx.fillStyle = `rgba(255, 255, 255, ${0.3 * (1 - distToMoonLine/100)})`;
+             ctx.fillRect(x, y, 4, 1);
+             ctx.restore();
+          }
+        }
+        ctx.lineTo(w, h);
+        ctx.fill();
+      });
+
+      // 蓝眼泪粒子
+      if (Math.random() > 0.5) {
+        particles.push(new Particle(mouseRef.current.x, mouseRef.current.y));
+      }
+      particles.forEach((p, i) => {
+        p.update();
+        if (p.life <= 0) particles.splice(i, 1);
+        ctx.fillStyle = `rgba(0, 150, 255, ${p.life})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+        ctx.fill();
+      });
+    };
+
+    const drawIsland = (time) => {
+      const centerX = w * 0.55;
+      const centerY = h * 0.72;
+      const iW = Math.min(w * 0.65, 400);
+
+      ctx.save();
+      ctx.translate(centerX - iW/2, centerY);
+
+      // 岛屿主体 - 增加层次感
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      islandPoints.forEach(p => ctx.lineTo(p.x * iW, -p.y));
+      ctx.lineTo(iW, 0);
+      ctx.closePath();
+      
+      const islandGrad = ctx.createLinearGradient(0, -100, 0, 0);
+      islandGrad.addColorStop(0, '#081a33'); // 明亮面
+      islandGrad.addColorStop(1, '#020812'); // 底部暗色
+      ctx.fillStyle = islandGrad;
+      ctx.fill();
+
+      // 灯塔升级
+      const ltX = iW * 0.75;
+      const ltY = -islandPoints[Math.floor(islandPoints.length * 0.75)].y;
+      
+      // 灯塔暖光窗户
+      ctx.fillStyle = '#ffaa00';
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = '#ffaa00';
+      ctx.fillRect(ltX + 2, ltY - 12, 2, 3);
+      ctx.shadowBlur = 0;
+
+      // 旋转光束
+      const angle = (time * 0.0008) % (Math.PI * 2);
+      const beamGrad = ctx.createRadialGradient(ltX+3, ltY-18, 0, ltX+3, ltY-18, 250);
+      beamGrad.addColorStop(0, 'rgba(255, 255, 220, 0.3)');
+      beamGrad.addColorStop(1, 'rgba(255, 255, 220, 0)');
+      
+      ctx.save();
+      ctx.translate(ltX + 3, ltY - 18);
+      ctx.rotate(angle);
+      ctx.fillStyle = beamGrad;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, 250, -0.15, 0.15);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.restore();
+    };
+
+    const render = (time) => {
+      ctx.clearRect(0, 0, w, h);
+      drawSky(time);
+      drawMeteors(time);
+      drawIsland(time);
+      drawSea(time);
+      
+      // 绘制远景星星 (缓慢移动)
+      stars.forEach(s => {
+        s.opacity += (Math.random() - 0.5) * 0.02;
+        ctx.fillStyle = `rgba(255, 255, 255, ${Math.max(0.2, Math.min(1, s.opacity))})`;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      animationFrameId = requestAnimationFrame(render);
+    };
+
+    const handleMouseMove = (e) => {
+      mouseRef.current = { x: e.clientX, y: e.clientY };
+    };
+
+    window.addEventListener('resize', init);
+    window.addEventListener('mousemove', handleMouseMove);
+    init();
+    render(0);
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      window.removeEventListener('resize', init);
+      window.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, []);
+
+  return <canvas ref={canvasRef} className="fixed inset-0 z-0 bg-[#010812]" />;
+};
+
+export default function App() {
+  const [view, setView] = useState('home');
+  const [user, setUser] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [searchCode, setSearchCode] = useState('');
+  const [content, setContent] = useState('');
+  const [secretCode, setSecretCode] = useState('');
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentSongIndex, setCurrentSongIndex] = useState(0);
+
+  useEffect(() => {
+    const initAuth = async () => {
+      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        await signInWithCustomToken(auth, __initial_auth_token);
+      } else {
+        await signInAnonymously(auth);
+      }
+    };
+    initAuth();
+    onAuthStateChanged(auth, setUser);
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'messages'));
+    return onSnapshot(q, (snapshot) => {
+      setMessages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+        .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
+    }, (err) => console.error(err));
+  }, [user]);
+
+  const handlePost = async () => {
+    if (content.length < 5 || !user) return;
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'messages'), {
+      content,
+      secretCode,
+      author: '岛民',
+      avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${Math.random()}`,
+      createdAt: serverTimestamp()
+    });
+    setContent(''); setSecretCode(''); setView('browse');
+  };
+
+  return (
+    <div className="min-h-screen text-white font-sans overflow-x-hidden">
+      <IslandCanvas />
+
+      {/* 极简沉浸式 UI */}
+      <div className="relative z-10 container mx-auto px-6 max-w-lg">
+        {view === 'home' && (
+          <div className="flex flex-col items-center justify-center min-h-screen">
+            <div className="text-center space-y-8 animate-in fade-in zoom-in duration-1000">
+              <h1 className="text-5xl font-serif tracking-[0.8em] font-extralight text-blue-50 drop-shadow-2xl">蓝色留言岛</h1>
+              <p className="text-xs text-blue-200/40 tracking-[0.3em] font-light">EST. 2024 · 听见海的声音</p>
+              
+              <div className="pt-20 space-y-6 w-64 mx-auto">
+                <button 
+                  onClick={() => setView('send')}
+                  className="w-full py-4 bg-white/5 backdrop-blur-2xl border border-white/10 rounded-full text-sm tracking-[0.5em] hover:bg-white/10 transition-all"
+                >
+                  投递心事
+                </button>
+                <button 
+                  onClick={() => setView('browse')}
+                  className="w-full py-4 text-blue-200/40 text-xs tracking-[0.4em] hover:text-white transition-all"
+                >
+                  寻找漂流瓶
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {view === 'send' && (
+          <div className="pt-24 pb-32 animate-in slide-in-from-bottom-12 duration-700">
+            <div className="flex items-center justify-between mb-12">
+               <button onClick={() => setView('home')} className="text-blue-200/30 text-xs tracking-widest hover:text-white transition-all">← 返回码头</button>
+               <div className="text-[10px] text-white/10 tracking-[0.5em]">NEW MESSAGE</div>
+            </div>
+            <div className="space-y-8">
+              <textarea 
+                value={content}
+                onChange={e => setContent(e.target.value)}
+                placeholder="这一刻，你在想什么..."
+                className="w-full h-64 bg-transparent text-xl font-serif leading-relaxed placeholder:text-white/5 outline-none resize-none"
+              />
+              <div className="h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
+              <div className="flex gap-4">
+                <input 
+                  type="text" value={secretCode} onChange={e => setSecretCode(e.target.value)}
+                  placeholder="暗号 (选填)"
+                  className="flex-1 bg-white/5 border border-white/5 rounded-2xl p-4 text-xs outline-none focus:border-blue-500/50 transition-all"
+                />
+                <button 
+                  onClick={handlePost}
+                  disabled={content.length < 5}
+                  className="px-8 bg-blue-600 rounded-2xl font-bold text-sm tracking-widest disabled:opacity-20 transition-all active:scale-95"
+                >
+                  投递
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {view === 'browse' && (
+          <div className="pt-24 pb-32 animate-in fade-in duration-1000">
+            <div className="sticky top-0 pt-4 pb-8 bg-gradient-to-b from-[#010812] to-transparent z-20">
+              <input 
+                type="text" value={searchCode} onChange={e => setSearchCode(e.target.value)}
+                placeholder="输入暗号 开启信封..."
+                className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm outline-none focus:ring-1 focus:ring-blue-500/30 transition-all"
+              />
+            </div>
+            <div className="grid gap-12">
+              {(searchCode ? messages.filter(m => m.secretCode === searchCode) : messages).map((msg) => (
+                <div key={msg.id} className="group relative">
+                  <div className="absolute -left-4 top-0 bottom-0 w-[1px] bg-gradient-to-b from-blue-500/50 to-transparent"></div>
+                  <div className="pl-6 space-y-4">
+                    <div className="flex items-center gap-3 opacity-30 text-[10px] tracking-tighter uppercase font-mono">
+                      <span>{msg.author}</span>
+                      <span>·</span>
+                      <span>{msg.createdAt?.seconds ? new Date(msg.createdAt.seconds * 1000).toLocaleDateString() : 'RECENT'}</span>
+                    </div>
+                    <p className="text-blue-100/80 font-serif leading-loose text-lg">
+                      {msg.content}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 悬浮音乐组件 */}
+      <div className="fixed bottom-10 right-10 z-50 flex flex-col items-center gap-6">
+        <div className={`transition-all duration-500 ${isPlaying ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
+           <div className="bg-black/60 backdrop-blur-3xl p-4 rounded-3xl border border-white/10 flex items-center gap-4">
+              <div className="w-10 h-10 bg-blue-900/50 rounded-full flex items-center justify-center animate-spin-slow">
+                 <Music size={16} className="text-blue-400"/>
+              </div>
+              <div className="pr-4">
+                <div className="text-[10px] font-bold text-white/90">{playlist[currentSongIndex].title}</div>
+                <div className="text-[9px] text-white/30">{playlist[currentSongIndex].artist}</div>
+              </div>
+           </div>
+        </div>
+        <button 
+          onClick={() => setIsPlaying(!isPlaying)}
+          className="w-16 h-16 bg-white/5 backdrop-blur-3xl border border-white/10 rounded-full flex items-center justify-center hover:bg-white/10 transition-all shadow-2xl"
+        >
+          {isPlaying ? <Pause size={20} /> : <Play size={20} className="ml-1" />}
+        </button>
+      </div>
+
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@200;400&display=swap');
+        .font-serif { font-family: 'Noto Serif SC', serif; }
+        .animate-spin-slow { animation: spin 8s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        ::selection { background: rgba(59, 130, 246, 0.3); color: white; }
+      `}</style>
+    </div>
+  );
+}

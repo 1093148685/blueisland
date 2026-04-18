@@ -12,7 +12,8 @@
       "Bash(mv server_backend server/backend)",
       "Bash(mv web/web/server ./server_backend_temp)",
       "Bash(mv server_backend_temp server/backend)",
-      "Bash(dotnet restore *)"
+      "Bash(dotnet restore *)",
+      "Bash(docker build *)"
     ]
   }
 }
