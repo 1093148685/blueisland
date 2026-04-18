@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Search, Home, Lock, Music, Play, Pause, SkipForward, SkipBack, MessageCircleHeart, Ghost, Waves, CloudRain, Flame, Sparkles, Wind, Bot, Send, X } from 'lucide-react';
 import { messageApi, aiModelApi, spiritApi } from '../api';
 
-const MUSIC_BASE_URL = 'http://localhost:5170/assets/music';
-const AMBIENT_BASE_URL = 'http://localhost:5170/assets/ambient';
+const MUSIC_BASE_URL = '/assets/music';
+const AMBIENT_BASE_URL = '/assets/ambient';
 
 const rawPlaylist = [
   "青花瓷-周杰伦.mp3",
@@ -26,11 +26,11 @@ const playlist = rawPlaylist.map(file => {
 });
 
 const anonAvatars = [
-  "https://api.dicebear.com/7.x/adventurer/svg?seed=Felix",
-  "https://api.dicebear.com/7.x/adventurer/svg?seed=Aneka",
-  "https://api.dicebear.com/7.x/adventurer/svg?seed=Buddy",
-  "https://api.dicebear.com/7.x/adventurer/svg?seed=Max",
-  "https://api.dicebear.com/7.x/adventurer/svg?seed=Luna"
+  "https://api.dicebear.com/7.x/lorelei/svg?seed=Midnight",
+  "https://api.dicebear.com/7.x/lorelei/svg?seed=Ocean",
+  "https://api.dicebear.com/7.x/lorelei/svg?seed=Sunset",
+  "https://api.dicebear.com/7.x/lorelei/svg?seed=Forest",
+  "https://api.dicebear.com/7.x/lorelei/svg?seed=Cloud"
 ];
 
 export default function HomePage() {
