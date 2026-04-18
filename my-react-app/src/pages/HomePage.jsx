@@ -367,9 +367,9 @@ export default function HomePage() {
 
   // 播放搜索到的歌曲
   const playSearchedSong = (song) => {
-    const newPlaylist = [...playlist, { title: song.title, artist: song.author, url: song.url }];
-    setPlaylist(newPlaylist);
-    setCurrentSongIndex(newPlaylist.length - 1);
+    // 直接播放，不添加到默认播放列表
+    setCurrentSongIndex(-1);
+    setPlaylist([{ title: song.title, artist: song.author, url: song.url }]);
     setIsPlaying(true);
     setSearchResults([]);
     setMusicSearch('');
@@ -873,30 +873,22 @@ export default function HomePage() {
                    搜索
                  </button>
                </div>
-               {searchResults.length > 0 && (
-                 <div className="mt-2 max-h-32 overflow-y-auto custom-scrollbar space-y-1">
-                   {searchResults.map((song, i) => (
-                     <div key={i} onClick={() => playSearchedSong(song)} className="text-[9px] p-2 rounded-lg bg-white/5 hover:bg-white/10 cursor-pointer">
-                       <div className="flex justify-between">
-                         <span className="truncate">{song.title}</span>
-                         <span className="opacity-40">{song.author}</span>
-                       </div>
-                     </div>
-                   ))}
-                 </div>
-               )}
             </div>
 
-            <div className="space-y-1 max-h-28 overflow-y-auto pr-2 custom-scrollbar">
-               {playlist.map((song, i) => (
+            <div className="space-y-1 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+               {(searchResults.length > 0 ? searchResults : playlist).map((song, i) => (
                  <div key={i} onClick={() => {
-                   setCurrentSongIndex(i);
-                   setIsPlaying(true);
-                   setTimeout(() => audioRef.current?.play(), 100);
+                   if (searchResults.length > 0) {
+                     playSearchedSong(song);
+                   } else {
+                     setCurrentSongIndex(i);
+                     setIsPlaying(true);
+                     setTimeout(() => audioRef.current?.play(), 100);
+                   }
                  }} className={`text-[9px] p-2 rounded-xl cursor-pointer transition-colors ${currentSongIndex === i ? 'bg-blue-500/30 text-blue-200' : 'hover:bg-white/5 opacity-40 hover:opacity-100'}`}>
                    <div className="flex justify-between">
                      <span>{song.title}</span>
-                     <span>...</span>
+                     <span className="opacity-40">{song.author || ''}</span>
                    </div>
                  </div>
                ))}
