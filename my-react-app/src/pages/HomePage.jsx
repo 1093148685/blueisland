@@ -5,14 +5,7 @@ import { messageApi, aiModelApi, spiritApi, musicApi } from '../api';
 
 const AMBIENT_BASE_URL = '/assets/ambient';
 
-const defaultPlaylist = [
-  { title: "青花瓷", artist: "周杰伦", url: "http://music.163.com/song/media/outer/url?id=185976" },
-  { title: "晴天", artist: "周杰伦", url: "http://music.163.com/song/media/outer/url?id=186855" },
-  { title: "兰亭序", artist: "周杰伦", url: "http://music.163.com/song/media/outer/url?id=190137" },
-  { title: "消愁", artist: "薛之谦&毛不易", url: "http://music.163.com/song/media/outer/url?id=441491454" },
-  { title: "有何不可", artist: "许嵩", url: "http://music.163.com/song/media/outer/url?id=167880" },
-  { title: "玫瑰花的葬礼", artist: "许嵩", url: "http://music.163.com/song/media/outer/url?id=167876" },
-];
+const defaultPlaylist = [];
 
 const anonAvatars = [
   "https://api.dicebear.com/7.x/lorelei/svg?seed=Midnight",
@@ -860,18 +853,26 @@ export default function HomePage() {
 
             {/* 音乐搜索 */}
             <div className="p-3 border-t border-white/5">
-               <input
-                 type="text"
-                 value={musicSearch}
-                 onChange={(e) => setMusicSearch(e.target.value)}
-                 onKeyDown={(e) => {
-                   if (e.key === 'Enter' && musicSearch.trim()) {
-                     handleMusicSearch();
-                   }
-                 }}
-                 placeholder="搜索音乐..."
-                 className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs outline-none focus:border-blue-500/50"
-               />
+               <div className="flex gap-2">
+                 <input
+                   type="text"
+                   value={musicSearch}
+                   onChange={(e) => setMusicSearch(e.target.value)}
+                   onKeyDown={(e) => {
+                     if (e.key === 'Enter' && musicSearch.trim()) {
+                       handleMusicSearch();
+                     }
+                   }}
+                   placeholder="搜索音乐..."
+                   className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs outline-none focus:border-blue-500/50"
+                 />
+                 <button
+                   onClick={() => musicSearch.trim() && handleMusicSearch()}
+                   className="px-3 py-2 bg-blue-500/30 hover:bg-blue-500/50 rounded-xl text-xs transition-colors"
+                 >
+                   搜索
+                 </button>
+               </div>
                {searchResults.length > 0 && (
                  <div className="mt-2 max-h-32 overflow-y-auto custom-scrollbar space-y-1">
                    {searchResults.map((song, i) => (
