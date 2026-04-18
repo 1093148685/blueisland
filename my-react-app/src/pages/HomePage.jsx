@@ -258,7 +258,8 @@ export default function HomePage() {
   });
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [currentLyric, setCurrentLyric] = useState('');
+  const [currentLyric, setCurrentLyric] = useState([]);
+  const [currentLyricIndex, setCurrentLyricIndex] = useState(-1);
   const [currentSongIndex, setCurrentSongIndex] = useState(() => {
     try { return parseInt(localStorage.getItem('music_current_index') || '0'); } catch { return 0; }
   });
@@ -339,9 +340,20 @@ export default function HomePage() {
 
   // 心跳 - 保持在线状态并获取在线人数
   useEffect(() => {
+    // 获取或生成会话ID
+    const getSessionId = () => {
+      let sessionId = localStorage.getItem('visitorSessionId');
+      if (!sessionId) {
+        sessionId = 'sess_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+        localStorage.setItem('visitorSessionId', sessionId);
+      }
+      return sessionId;
+    };
+
     const sendHeartbeat = async () => {
       try {
-        await accessApi.heartbeat('home');
+        const sessionId = getSessionId();
+        await accessApi.heartbeat('home', sessionId);
         const result = await accessApi.getStats();
         if (result.code === 200) {
           setOnlineUsers(result.data.onlineUsers || 0);
@@ -449,19 +461,36 @@ export default function HomePage() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // 带重试的API请求
+  const fetchWithRetry = async (fn, maxRetries = 3, delay = 500) => {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const res = await fn();
+        if (res && (Array.isArray(res) ? res.length > 0 : Object.keys(res).length > 0)) {
+          return res;
+        }
+      } catch (err) {
+        if (i === maxRetries - 1) throw err;
+      }
+      if (i < maxRetries - 1) await new Promise(r => setTimeout(r, delay * (i + 1)));
+    }
+    return null;
+  };
+
   // 搜索音乐
   const handleMusicSearch = async () => {
     if (!musicSearch.trim()) return;
     setIsSearching(true);
     setSearchResults([]);
     try {
-      const res = await musicApi.search(musicSearch);
-      // GD Studio 返回格式: { info: [...], ... } 或直接是数组
+      const res = await fetchWithRetry(() => musicApi.search(musicSearch));
       let results = [];
-      if (Array.isArray(res)) {
-        results = res;
-      } else if (res.info && Array.isArray(res.info)) {
-        results = res.info;
+      if (res) {
+        if (Array.isArray(res)) {
+          results = res;
+        } else if (res.info && Array.isArray(res.info)) {
+          results = res.info;
+        }
       }
       if (results.length > 0) {
         setSearchResults(results.slice(0, 8));
@@ -496,12 +525,14 @@ export default function HomePage() {
   // 播放搜索到的歌曲
   const playSearchedSong = async (song) => {
     try {
-      const res = await musicApi.getUrl(song.id, song.source || 'netease', 320);
+      const res = await fetchWithRetry(() => musicApi.getUrl(song.id, song.source || 'netease', 320));
       let url = '';
-      if (res.url) {
-        url = res.url;
-      } else if (res.data && res.data.url) {
-        url = res.data.url;
+      if (res) {
+        if (res.url) {
+          url = res.url;
+        } else if (res.data && res.data.url) {
+          url = res.data.url;
+        }
       }
       const newSong = { title: song.name || song.title, artist: song.artist, url };
       setPlaylist(prev => [...prev, newSong]);
@@ -510,9 +541,34 @@ export default function HomePage() {
       setIsPlaying(true);
       setSearchResults([]);
       setMusicSearch('');
-      setCurrentLyric('');
+      setCurrentLyric([]);
+      setCurrentLyricIndex(-1);
       setCurrentTime(0);
       setDuration(0);
+      // 获取歌词
+      try {
+        const lyricRes = await musicApi.getLyric(song.id, song.source || 'netease');
+        let lyricText = lyricRes.lyric || lyricRes.tlyric || '';
+        if (lyricText) {
+          // 解析LRC格式歌词
+          const lines = lyricText.split('\n');
+          const parsedLyrics = [];
+          for (const line of lines) {
+            const match = line.match(/\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)/);
+            if (match) {
+              const mins = parseInt(match[1]);
+              const secs = parseInt(match[2]);
+              const ms = parseInt(match[3].padEnd(3, '0'));
+              const time = mins * 60 + secs + ms / 1000;
+              const text = match[4].trim();
+              if (text) parsedLyrics.push({ time, text });
+            }
+          }
+          setCurrentLyric(parsedLyrics);
+        }
+      } catch (lyricErr) {
+        console.error('获取歌词失败:', lyricErr);
+      }
       setTimeout(() => audioRef.current?.play(), 100);
       // 记录播放日志
       try {
@@ -1028,8 +1084,20 @@ export default function HomePage() {
         }}
         onTimeUpdate={() => {
           if (audioRef.current) {
-            setCurrentTime(audioRef.current.currentTime);
+            const time = audioRef.current.currentTime;
+            setCurrentTime(time);
             setDuration(audioRef.current.duration || 0);
+            // 更新歌词索引
+            const lyrics = currentLyric;
+            let idx = -1;
+            for (let i = 0; i < lyrics.length; i++) {
+              if (lyrics[i].time <= time) {
+                idx = i;
+              } else {
+                break;
+              }
+            }
+            setCurrentLyricIndex(idx);
           }
         }}
         onLoadedMetadata={() => {
@@ -1131,11 +1199,23 @@ export default function HomePage() {
             </div>
 
             {/* 歌词显示 */}
-            <div className="min-h-[40px] text-center">
-              {currentLyric ? (
-                <div className="text-xs text-blue-200/80 font-serif italic leading-relaxed animate-pulse">
-                  {currentLyric}
-                </div>
+            <div className="min-h-[40px] text-center flex flex-col items-center justify-center gap-1">
+              {currentLyric.length > 0 && currentLyricIndex >= 0 ? (
+                <>
+                  {currentLyricIndex > 0 && (
+                    <div className="text-[10px] text-blue-200/30 font-serif italic truncate max-w-[280px]">
+                      {currentLyric[currentLyricIndex - 1]?.text}
+                    </div>
+                  )}
+                  <div className="text-xs text-blue-200 font-serif italic leading-relaxed animate-pulse">
+                    {currentLyric[currentLyricIndex]?.text}
+                  </div>
+                  {currentLyricIndex < currentLyric.length - 1 && (
+                    <div className="text-[10px] text-blue-200/30 font-serif italic truncate max-w-[280px]">
+                      {currentLyric[currentLyricIndex + 1]?.text}
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className="text-[10px] opacity-30 italic">
                   {playlist[currentSongIndex]?.url ? '该歌曲暂无歌词' : '选择一个曲目播放'}

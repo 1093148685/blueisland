@@ -14,9 +14,9 @@ public class AccessController : ControllerBase
 {
     private readonly ISqlSugarClient _db;
 
-    // 在线用户跟踪（内存中）- IP + 页面
+    // 在线用户跟踪（内存中）- SessionId -> DateTime
     private static readonly ConcurrentDictionary<string, DateTime> _onlineUsers = new();
-    // 页面在线统计 - 页面名称 -> IP列表
+    // 页面在线统计 - 页面名称 -> SessionId列表
     private static readonly ConcurrentDictionary<string, HashSet<string>> _pageUsers = new();
     private static readonly TimeSpan _onlineTimeout = TimeSpan.FromMinutes(5);
 
@@ -85,13 +85,14 @@ public class AccessController : ControllerBase
     public async Task<Result> Heartbeat([FromBody] HeartbeatRequest? request)
     {
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+        var sessionId = request?.SessionId ?? ip; // 优先使用sessionId，没有则用IP
         var userAgent = HttpContext.Request.Headers.UserAgent.ToString();
         var page = request?.Page ?? "home";
 
-        // 清理该IP之前的页面记录
+        // 清理该SessionId之前的页面记录
         foreach (var key in _pageUsers.Keys.ToList())
         {
-            _pageUsers[key].Remove(ip);
+            _pageUsers[key].Remove(sessionId);
             if (_pageUsers[key].Count == 0)
                 _pageUsers.TryRemove(key, out _);
         }
@@ -99,10 +100,10 @@ public class AccessController : ControllerBase
         // 更新页面在线用户
         if (!_pageUsers.ContainsKey(page))
             _pageUsers[page] = new HashSet<string>();
-        _pageUsers[page].Add(ip);
+        _pageUsers[page].Add(sessionId);
 
         // 更新在线用户
-        _onlineUsers[ip] = DateTime.Now;
+        _onlineUsers[sessionId] = DateTime.Now;
 
         // 记录访问日志（采样，减少数据库压力，每分钟最多记录一次）
         var shouldLog = true;
@@ -168,4 +169,5 @@ public class AccessController : ControllerBase
 public class HeartbeatRequest
 {
     public string? Page { get; set; }
+    public string? SessionId { get; set; }
 }

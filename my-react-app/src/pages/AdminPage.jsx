@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, MessageSquare, Settings, Trash2, Edit2, Save, X, LayoutDashboard, Shield, Music, BarChart3, Users, Eye } from 'lucide-react';
+import { LogOut, MessageSquare, Settings, Trash2, Edit2, Save, X, LayoutDashboard, Shield, Music, BarChart3, Users, Eye, RefreshCw } from 'lucide-react';
 import { messageApi, aiModelApi, authApi, musicApi, accessApi } from '../api';
 
 export default function AdminPage() {
@@ -58,9 +58,19 @@ export default function AdminPage() {
 
   // 心跳 - 保持在线状态
   useEffect(() => {
+    const getSessionId = () => {
+      let sessionId = localStorage.getItem('visitorSessionId');
+      if (!sessionId) {
+        sessionId = 'sess_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+        localStorage.setItem('visitorSessionId', sessionId);
+      }
+      return sessionId;
+    };
+
     const sendHeartbeat = async () => {
       try {
-        await accessApi.heartbeat('admin');
+        const sessionId = getSessionId();
+        await accessApi.heartbeat('admin', sessionId);
       } catch (error) {
         console.error('心跳失败:', error);
       }
@@ -87,6 +97,17 @@ export default function AdminPage() {
       loadAccessStats();
     }
   }, [activeTab, authChecked]);
+
+  // 当在访问统计页面时，定时静默刷新数据
+  useEffect(() => {
+    if (activeTab !== 'access-stats') return;
+
+    const interval = setInterval(() => {
+      loadAccessStats();
+    }, 10000); // 每10秒刷新一次
+
+    return () => clearInterval(interval);
+  }, [activeTab]);
 
   const checkAuth = async () => {
     const token = localStorage.getItem('token');
@@ -1005,6 +1026,21 @@ export default function AdminPage() {
 
         {activeTab === 'access-stats' && (
           <div className="space-y-6">
+            {/* 标题和刷新按钮 */}
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold">访问统计</h2>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] opacity-40">自动刷新中</span>
+                <button
+                  onClick={loadAccessStats}
+                  className="px-3 py-1 bg-white/10 hover:bg-white/20 rounded-lg text-xs transition-all flex items-center gap-1"
+                >
+                  <RefreshCw size={12} />
+                  刷新
+                </button>
+              </div>
+            </div>
+
             {/* 统计卡片 */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
@@ -1053,6 +1089,9 @@ export default function AdminPage() {
                       <div className="flex items-center gap-2">
                         <Eye size={12} className="opacity-40" />
                         <span className="font-mono">{user.ipAddress}</span>
+                        {user.country && (
+                          <span className="text-[9px] opacity-50">{user.country} {user.province} {user.city}</span>
+                        )}
                       </div>
                       <span className="opacity-40 text-[10px]">
                         {user.lastSeen ? new Date(user.lastSeen).toLocaleString() : ''}

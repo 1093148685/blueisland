@@ -87,6 +87,9 @@ export const musicApi = {
   getUrl: (id, source = 'netease', br = 320) => api.get(GD_MUSIC_API, {
     params: { types: 'url', source, id, br }
   }),
+  getLyric: (id, source = 'netease') => api.get(GD_MUSIC_API, {
+    params: { types: 'lyric', source, id }
+  }),
   // 音乐配置（管理员）
   getMusicConfig: () => api.get('/music-config'),
   saveMusicConfig: (data) => api.post('/music-config', data),
@@ -99,7 +102,7 @@ export const musicApi = {
 // 访问统计相关
 export const accessApi = {
   getStats: () => api.get('/access/stats'),
-  heartbeat: (page) => api.post('/access/heartbeat', { page }),
+  heartbeat: (page, sessionId) => api.post('/access/heartbeat', { page, sessionId }),
   getOnlineUsers: () => api.get('/access/online'),
 };
 
