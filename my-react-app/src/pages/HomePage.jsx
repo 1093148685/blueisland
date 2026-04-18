@@ -263,6 +263,8 @@ export default function HomePage() {
   const [currentSongIndex, setCurrentSongIndex] = useState(() => {
     try { return parseInt(localStorage.getItem('music_current_index') || '0'); } catch { return 0; }
   });
+  // 当前播放歌曲信息（用于歌词获取）
+  const [currentPlayingSong, setCurrentPlayingSong] = useState(null);
   const [playbackMode, setPlaybackMode] = useState(() => {
     try { return localStorage.getItem('music_playback_mode') || 'loop'; } catch { return 'loop'; }
   });
@@ -436,6 +438,54 @@ export default function HomePage() {
     }
   }, [currentSongIndex]);
 
+  // 歌曲切换时清空歌词
+  useEffect(() => {
+    setCurrentLyric([]);
+    setCurrentLyricIndex(-1);
+  }, [currentSongIndex]);
+
+  // currentPlayingSong变化时获取歌词
+  useEffect(() => {
+    if (!currentPlayingSong || !currentPlayingSong.id) return;
+
+    const fetchLyric = async () => {
+      try {
+        const lyricRes = await fetchWithRetry(() => musicApi.getLyric(currentPlayingSong.id, currentPlayingSong.source));
+        let lyricText = lyricRes?.lyric || lyricRes?.tlyric || '';
+        if (lyricText) {
+          const lines = lyricText.split('\n');
+          const parsedLyrics = [];
+          for (const line of lines) {
+            const match = line.match(/\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)/);
+            if (match) {
+              const mins = parseInt(match[1]);
+              const secs = parseInt(match[2]);
+              const ms = parseInt(match[3].padEnd(3, '0'));
+              const time = mins * 60 + secs + ms / 1000;
+              const text = match[4].trim();
+              if (text) parsedLyrics.push({ time, text });
+            }
+          }
+          setCurrentLyric(parsedLyrics);
+        }
+      } catch (lyricErr) {
+        console.error('获取歌词失败:', lyricErr);
+      }
+    };
+
+    fetchLyric();
+  }, [currentPlayingSong]);
+
+  // 页面加载时从播放列表恢复currentPlayingSong
+  useEffect(() => {
+    if (playlist.length > 0 && currentSongIndex >= 0 && currentSongIndex < playlist.length) {
+      const song = playlist[currentSongIndex];
+      if (song.id && (!currentPlayingSong?.id || currentPlayingSong.id !== song.id)) {
+        setCurrentPlayingSong({ id: song.id, source: song.source || 'netease' });
+      }
+    }
+  }, [currentSongIndex, playlist.length]);
+
   // 获取昼夜滤镜
   const getDynamicFilter = () => {
     if (currentHour >= 19 || currentHour < 5) return 'brightness(0.5) saturate(0.8) hue-rotate(20deg)'; // 深夜
@@ -534,10 +584,11 @@ export default function HomePage() {
           url = res.data.url;
         }
       }
-      const newSong = { title: song.name || song.title, artist: song.artist, url };
+      const newSong = { title: song.name || song.title, artist: song.artist, url, id: song.id, source: song.source || 'netease' };
       setPlaylist(prev => [...prev, newSong]);
       const newIndex = playlist.length;
       setCurrentSongIndex(newIndex);
+      setCurrentPlayingSong({ id: song.id, source: song.source || 'netease' });
       setIsPlaying(true);
       setSearchResults([]);
       setMusicSearch('');
@@ -545,30 +596,6 @@ export default function HomePage() {
       setCurrentLyricIndex(-1);
       setCurrentTime(0);
       setDuration(0);
-      // 获取歌词
-      try {
-        const lyricRes = await musicApi.getLyric(song.id, song.source || 'netease');
-        let lyricText = lyricRes.lyric || lyricRes.tlyric || '';
-        if (lyricText) {
-          // 解析LRC格式歌词
-          const lines = lyricText.split('\n');
-          const parsedLyrics = [];
-          for (const line of lines) {
-            const match = line.match(/\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)/);
-            if (match) {
-              const mins = parseInt(match[1]);
-              const secs = parseInt(match[2]);
-              const ms = parseInt(match[3].padEnd(3, '0'));
-              const time = mins * 60 + secs + ms / 1000;
-              const text = match[4].trim();
-              if (text) parsedLyrics.push({ time, text });
-            }
-          }
-          setCurrentLyric(parsedLyrics);
-        }
-      } catch (lyricErr) {
-        console.error('获取歌词失败:', lyricErr);
-      }
       setTimeout(() => audioRef.current?.play(), 100);
       // 记录播放日志
       try {
@@ -1071,7 +1098,9 @@ export default function HomePage() {
           } else if (playbackMode === 'sequential') {
             // 顺序：播完就停止
             if (currentSongIndex < playlist.length - 1) {
-              setCurrentSongIndex(currentSongIndex + 1);
+              const nextIndex = currentSongIndex + 1;
+              setCurrentSongIndex(nextIndex);
+              setCurrentPlayingSong({ id: playlist[nextIndex]?.id, source: playlist[nextIndex]?.source || 'netease' });
             } else {
               setIsPlaying(false);
             }
@@ -1079,8 +1108,9 @@ export default function HomePage() {
             // 随机：随机选一首播放
             const randomIndex = Math.floor(Math.random() * playlist.length);
             setCurrentSongIndex(randomIndex);
+            setCurrentPlayingSong({ id: playlist[randomIndex]?.id, source: playlist[randomIndex]?.source || 'netease' });
           }
-          setCurrentLyric('');
+          setCurrentLyric([]);
         }}
         onTimeUpdate={() => {
           if (audioRef.current) {
@@ -1144,6 +1174,7 @@ export default function HomePage() {
                   prevIndex = (currentSongIndex - 1 + playlist.length) % playlist.length;
                 }
                 setCurrentSongIndex(prevIndex);
+                setCurrentPlayingSong({ id: playlist[prevIndex]?.id, source: playlist[prevIndex]?.source || 'netease' });
                 setIsPlaying(true);
                 setTimeout(() => audioRef.current?.play(), 100);
               }} className="w-8 h-8 flex items-center justify-center opacity-40 hover:opacity-100 transition-opacity"><SkipBack size={18}/></button>
@@ -1168,6 +1199,7 @@ export default function HomePage() {
                   nextIndex = (currentSongIndex + 1) % playlist.length;
                 }
                 setCurrentSongIndex(nextIndex);
+                setCurrentPlayingSong({ id: playlist[nextIndex]?.id, source: playlist[nextIndex]?.source || 'netease' });
                 setIsPlaying(true);
                 setTimeout(() => audioRef.current?.play(), 100);
               }} className="w-8 h-8 flex items-center justify-center opacity-40 hover:opacity-100 transition-opacity"><SkipForward size={18}/></button>
@@ -1285,6 +1317,7 @@ export default function HomePage() {
                      <div key={i} className={`group flex items-center gap-1 px-1 py-1.5 rounded-lg cursor-pointer transition-colors ${currentSongIndex === i ? 'bg-blue-500/30 text-blue-200' : 'hover:bg-white/5 opacity-40 hover:opacity-100'}`}>
                        <span onClick={() => {
                          setCurrentSongIndex(i);
+                         setCurrentPlayingSong({ id: playlist[i]?.id, source: playlist[i]?.source || 'netease' });
                          setIsPlaying(true);
                          setTimeout(() => audioRef.current?.play(), 100);
                        }} className="flex-1 truncate text-[9px] leading-tight">{song.name || song.title}</span>
