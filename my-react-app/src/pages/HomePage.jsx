@@ -33,6 +33,250 @@ const anonAvatars = [
   "https://api.dicebear.com/7.x/lorelei/svg?seed=Cloud"
 ];
 
+/**
+ * 极简粒子类 - 用于蓝眼泪效果
+ */
+class Particle {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.size = Math.random() * 2 + 1;
+    this.speedX = (Math.random() - 0.5) * 0.5;
+    this.speedY = (Math.random() - 0.5) * 0.5;
+    this.life = 1;
+  }
+  update() {
+    this.x += this.speedX;
+    this.y += this.speedY;
+    this.life -= 0.005;
+  }
+}
+
+const IslandCanvas = () => {
+  const canvasRef = useRef(null);
+  const mouseRef = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let animationFrameId;
+
+    let w, h;
+    const stars = [];
+    const meteors = [];
+    const particles = [];
+    const islandPoints = [];
+
+    const init = () => {
+      w = canvas.width = window.innerWidth;
+      h = canvas.height = window.innerHeight;
+
+      stars.length = 0;
+      for (let i = 0; i < 150; i++) {
+        stars.push({
+          x: Math.random() * w,
+          y: Math.random() * h * 0.8,
+          size: Math.random() * 1.5,
+          opacity: Math.random(),
+          blink: Math.random() * 0.05
+        });
+      }
+
+      islandPoints.length = 0;
+      const segments = 30;
+      for (let i = 0; i <= segments; i++) {
+        const relX = i / segments;
+        let baseHeight = Math.sin(relX * Math.PI) * 80;
+        if (relX > 0.6 && relX < 0.8) baseHeight += 40;
+        let noise = baseHeight + (Math.random() - 0.5) * 20;
+        if (i === 0 || i === segments) noise = 0;
+        islandPoints.push({ x: relX, y: noise });
+      }
+    };
+
+    const drawSky = (time) => {
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, '#020a1a');
+      grad.addColorStop(0.5, '#051b36');
+      grad.addColorStop(1, '#0c2d52');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+
+      const moonX = w * 0.2;
+      const moonY = h * 0.25;
+      const moonRadius = 50;
+
+      const moonGlow = ctx.createRadialGradient(moonX, moonY, 0, moonX, moonY, 150);
+      moonGlow.addColorStop(0, 'rgba(200, 230, 255, 0.15)');
+      moonGlow.addColorStop(1, 'rgba(200, 230, 255, 0)');
+      ctx.fillStyle = moonGlow;
+      ctx.beginPath();
+      ctx.arc(moonX, moonY, 150, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#eef6ff';
+      ctx.shadowBlur = 20;
+      ctx.shadowColor = '#fff';
+      ctx.beginPath();
+      ctx.arc(moonX, moonY, moonRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    };
+
+    const drawMeteors = (time) => {
+      if (Math.random() < 0.005) {
+        meteors.push({
+          x: Math.random() * w,
+          y: 0,
+          len: Math.random() * 80 + 20,
+          speed: Math.random() * 10 + 5,
+          opacity: 1
+        });
+      }
+
+      meteors.forEach((m, i) => {
+        m.x += m.speed;
+        m.y += m.speed;
+        m.opacity -= 0.01;
+        if (m.opacity <= 0) meteors.splice(i, 1);
+
+        ctx.strokeStyle = `rgba(255, 255, 255, ${m.opacity})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(m.x, m.y);
+        ctx.lineTo(m.x - m.len, m.y - m.len);
+        ctx.stroke();
+      });
+    };
+
+    const drawSea = (time) => {
+      const seaLevel = h * 0.72;
+
+      const layers = [
+        { color: '#0a2342', amp: 10, freq: 0.002, speed: 0.001 },
+        { color: '#061830', amp: 15, freq: 0.003, speed: 0.0008 },
+        { color: '#020c1a', amp: 12, freq: 0.0015, speed: 0.0005 }
+      ];
+
+      layers.forEach((layer, idx) => {
+        ctx.fillStyle = layer.color;
+        ctx.beginPath();
+        ctx.moveTo(0, h);
+        for (let x = 0; x <= w; x += 20) {
+          const y = seaLevel + idx * 20 + Math.sin(x * layer.freq + time * layer.speed) * layer.amp;
+          ctx.lineTo(x, y);
+
+          const moonX = w * 0.2;
+          const distToMoonLine = Math.abs(x - moonX);
+          if (distToMoonLine < 100 && Math.random() > 0.8) {
+            ctx.save();
+            ctx.fillStyle = `rgba(255, 255, 255, ${0.3 * (1 - distToMoonLine / 100)})`;
+            ctx.fillRect(x, y, 4, 1);
+            ctx.restore();
+          }
+        }
+        ctx.lineTo(w, h);
+        ctx.fill();
+      });
+
+      if (Math.random() > 0.5) {
+        particles.push(new Particle(mouseRef.current.x, mouseRef.current.y));
+      }
+      particles.forEach((p, i) => {
+        p.update();
+        if (p.life <= 0) particles.splice(i, 1);
+        ctx.fillStyle = `rgba(0, 150, 255, ${p.life})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    };
+
+    const drawIsland = (time) => {
+      const centerX = w * 0.55;
+      const centerY = h * 0.72;
+      const iW = Math.min(w * 0.65, 400);
+
+      ctx.save();
+      ctx.translate(centerX - iW / 2, centerY);
+
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      islandPoints.forEach(p => ctx.lineTo(p.x * iW, -p.y));
+      ctx.lineTo(iW, 0);
+      ctx.closePath();
+
+      const islandGrad = ctx.createLinearGradient(0, -100, 0, 0);
+      islandGrad.addColorStop(0, '#081a33');
+      islandGrad.addColorStop(1, '#020812');
+      ctx.fillStyle = islandGrad;
+      ctx.fill();
+
+      const ltX = iW * 0.75;
+      const ltY = -islandPoints[Math.floor(islandPoints.length * 0.75)].y;
+
+      ctx.fillStyle = '#ffaa00';
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = '#ffaa00';
+      ctx.fillRect(ltX + 2, ltY - 12, 2, 3);
+      ctx.shadowBlur = 0;
+
+      const angle = (time * 0.0008) % (Math.PI * 2);
+      const beamGrad = ctx.createRadialGradient(ltX + 3, ltY - 18, 0, ltX + 3, ltY - 18, 250);
+      beamGrad.addColorStop(0, 'rgba(255, 255, 220, 0.3)');
+      beamGrad.addColorStop(1, 'rgba(255, 255, 220, 0)');
+
+      ctx.save();
+      ctx.translate(ltX + 3, ltY - 18);
+      ctx.rotate(angle);
+      ctx.fillStyle = beamGrad;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, 250, -0.15, 0.15);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.restore();
+    };
+
+    const render = (time) => {
+      ctx.clearRect(0, 0, w, h);
+      drawSky(time);
+      drawMeteors(time);
+      drawIsland(time);
+      drawSea(time);
+
+      stars.forEach(s => {
+        s.opacity += (Math.random() - 0.5) * 0.02;
+        ctx.fillStyle = `rgba(255, 255, 255, ${Math.max(0.2, Math.min(1, s.opacity))})`;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      animationFrameId = requestAnimationFrame(render);
+    };
+
+    const handleMouseMove = (e) => {
+      mouseRef.current = { x: e.clientX, y: e.clientY };
+    };
+
+    window.addEventListener('resize', init);
+    window.addEventListener('mousemove', handleMouseMove);
+    init();
+    render(0);
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      window.removeEventListener('resize', init);
+      window.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, []);
+
+  return <canvas ref={canvasRef} className="fixed inset-0 z-0 bg-[#010812]" />;
+};
+
 export default function HomePage() {
   const navigate = useNavigate();
   const [view, setView] = useState('home');
@@ -313,12 +557,9 @@ export default function HomePage() {
   );
 
   return (
-    <div className="min-h-screen text-white font-sans selection:bg-blue-500/30 relative overflow-x-hidden transition-colors duration-500" style={{ backgroundColor: islandMood.color }}>
-      {/* 动态背景 */}
-      <div
-        className="fixed inset-0 z-0 bg-gradient-to-br from-[#05162a] via-[#0a1f3d] to-[#05162a] transition-all duration-3000"
-        style={{ filter: getDynamicFilter() }}
-      />
+    <div className="min-h-screen text-white font-sans selection:bg-blue-500/30 relative overflow-x-hidden transition-colors duration-500">
+      {/* 岛屿动态背景 */}
+      <IslandCanvas />
 
       <div className="relative z-10 container mx-auto px-6 max-w-lg">
         {view === 'home' && (
