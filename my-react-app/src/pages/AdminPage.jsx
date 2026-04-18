@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, MessageSquare, Settings, Trash2, Edit2, Save, X, LayoutDashboard, Shield } from 'lucide-react';
-import { messageApi, aiModelApi, authApi } from '../api';
+import { LogOut, MessageSquare, Settings, Trash2, Edit2, Save, X, LayoutDashboard, Shield, Music, BarChart3, Users, Eye } from 'lucide-react';
+import { messageApi, aiModelApi, authApi, musicApi, accessApi } from '../api';
 
 export default function AdminPage() {
   const navigate = useNavigate();
@@ -24,9 +24,50 @@ export default function AdminPage() {
     autoReply: true
   });
   const [auditStats, setAuditStats] = useState({ total: 0, violated: 0, frontendBlocked: 0, backendBlocked: 0, passed: 0 });
+  const [musicConfig, setMusicConfig] = useState({
+    defaultPlaybackMode: 'loop',
+    defaultVolume: 70,
+    enabled: true,
+    ambientEnabled: true,
+    ambientVolume: 50,
+    ambientWavesUrl: '',
+    ambientRainUrl: '',
+    ambientFireUrl: '',
+    remark: ''
+  });
+  const [musicStats, setMusicStats] = useState({
+    totalSearches: 0,
+    totalPlays: 0,
+    totalErrors: 0,
+    todaySearches: 0,
+    todayPlays: 0,
+    recentLogs: []
+  });
+  const [accessStats, setAccessStats] = useState({
+    totalVisits: 0,
+    todayVisits: 0,
+    onlineUsers: 0,
+    uniqueIps: 0,
+    recentUsers: [],
+    pageOnlineUsers: {}
+  });
 
   useEffect(() => {
     checkAuth();
+  }, []);
+
+  // 心跳 - 保持在线状态
+  useEffect(() => {
+    const sendHeartbeat = async () => {
+      try {
+        await accessApi.heartbeat('admin');
+      } catch (error) {
+        console.error('心跳失败:', error);
+      }
+    };
+    sendHeartbeat();
+    const interval = setInterval(sendHeartbeat, 60000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -39,6 +80,11 @@ export default function AdminPage() {
       loadAiModels();
     } else if (activeTab === 'ai-audit') {
       loadAiConfig();
+    } else if (activeTab === 'music-settings') {
+      loadMusicConfig();
+      loadMusicStats();
+    } else if (activeTab === 'access-stats') {
+      loadAccessStats();
     }
   }, [activeTab, authChecked]);
 
@@ -199,6 +245,65 @@ export default function AdminPage() {
     }
   };
 
+  const loadMusicConfig = async () => {
+    try {
+      const result = await musicApi.getMusicConfig();
+      if (result.code === 200) {
+        setMusicConfig({
+          defaultPlaybackMode: result.data.defaultPlaybackMode || 'loop',
+          defaultVolume: result.data.defaultVolume || 70,
+          enabled: result.data.enabled ?? true,
+          ambientEnabled: result.data.ambientEnabled ?? true,
+          ambientVolume: result.data.ambientVolume ?? 50,
+          ambientWavesUrl: result.data.ambientWavesUrl || '',
+          ambientRainUrl: result.data.ambientRainUrl || '',
+          ambientFireUrl: result.data.ambientFireUrl || '',
+          remark: result.data.remark || ''
+        });
+      }
+    } catch (error) {
+      console.error('加载音乐配置失败:', error);
+    }
+  };
+
+  const loadMusicStats = async () => {
+    try {
+      const result = await musicApi.getMusicStats();
+      if (result.code === 200) {
+        setMusicStats(result.data);
+      }
+    } catch (error) {
+      console.error('加载音乐统计失败:', error);
+    }
+  };
+
+  const handleSaveMusicConfig = async () => {
+    try {
+      await musicApi.saveMusicConfig(musicConfig);
+      alert('音乐配置保存成功！');
+    } catch (error) {
+      alert('保存失败，请重试');
+    }
+  };
+
+  const loadAccessStats = async () => {
+    try {
+      const result = await accessApi.getStats();
+      if (result.code === 200) {
+        setAccessStats({
+          totalVisits: result.data.totalVisits || 0,
+          todayVisits: result.data.todayVisits || 0,
+          onlineUsers: result.data.onlineUsers || 0,
+          uniqueIps: result.data.uniqueIps || 0,
+          recentUsers: result.data.recentUsers || [],
+          pageOnlineUsers: result.data.pageOnlineUsers || {}
+        });
+      }
+    } catch (error) {
+      console.error('加载访问统计失败:', error);
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
@@ -274,6 +379,28 @@ export default function AdminPage() {
           >
             <Shield size={20} />
             AI审核
+          </button>
+          <button
+            onClick={() => setActiveTab('music-settings')}
+            className={`flex items-center gap-2 px-6 py-3 rounded-xl transition-all ${
+              activeTab === 'music-settings'
+                ? 'bg-blue-500/50 shadow-lg'
+                : 'bg-white/5 hover:bg-white/10'
+            }`}
+          >
+            <Music size={20} />
+            音乐设置
+          </button>
+          <button
+            onClick={() => setActiveTab('access-stats')}
+            className={`flex items-center gap-2 px-6 py-3 rounded-xl transition-all ${
+              activeTab === 'access-stats'
+                ? 'bg-blue-500/50 shadow-lg'
+                : 'bg-white/5 hover:bg-white/10'
+            }`}
+          >
+            <Users size={20} />
+            访问统计
           </button>
         </div>
 
@@ -674,6 +801,267 @@ export default function AdminPage() {
                 >
                   保存 AI 配置到岛屿
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'music-settings' && (
+          <div className="space-y-6">
+            {/* 统计卡片 */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
+                <div className="text-[10px] uppercase tracking-widest opacity-40 font-bold mb-2">总搜索次数</div>
+                <div className="text-3xl font-bold text-blue-400">{musicStats.totalSearches}</div>
+              </div>
+              <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
+                <div className="text-[10px] uppercase tracking-widest opacity-40 font-bold mb-2">总播放次数</div>
+                <div className="text-3xl font-bold text-green-400">{musicStats.totalPlays}</div>
+              </div>
+              <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
+                <div className="text-[10px] uppercase tracking-widest opacity-40 font-bold mb-2">今日搜索</div>
+                <div className="text-3xl font-bold text-purple-400">{musicStats.todaySearches}</div>
+              </div>
+              <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
+                <div className="text-[10px] uppercase tracking-widest opacity-40 font-bold mb-2">今日播放</div>
+                <div className="text-3xl font-bold text-orange-400">{musicStats.todayPlays}</div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* 左侧：音乐配置 */}
+              <div className="bg-white/10 backdrop-blur-xl rounded-[2rem] p-8 border border-white/5 space-y-6">
+                <h3 className="text-sm font-bold">音乐功能设置</h3>
+
+                <div className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02]">
+                  <span className="text-xs opacity-60">启用音乐功能</span>
+                  <button
+                    onClick={() => setMusicConfig({ ...musicConfig, enabled: !musicConfig.enabled })}
+                    className={`w-10 h-5 rounded-full transition-all cursor-pointer relative ${
+                      musicConfig.enabled ? 'bg-blue-600' : 'bg-white/10'
+                    }`}
+                  >
+                    <div
+                      className="absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-all"
+                      style={{ transform: musicConfig.enabled ? 'translateX(20px)' : 'none' }}
+                    />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02]">
+                  <span className="text-xs opacity-60">启用白噪音功能</span>
+                  <button
+                    onClick={() => setMusicConfig({ ...musicConfig, ambientEnabled: !musicConfig.ambientEnabled })}
+                    className={`w-10 h-5 rounded-full transition-all cursor-pointer relative ${
+                      musicConfig.ambientEnabled ? 'bg-blue-600' : 'bg-white/10'
+                    }`}
+                  >
+                    <div
+                      className="absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-all"
+                      style={{ transform: musicConfig.ambientEnabled ? 'translateX(20px)' : 'none' }}
+                    />
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] uppercase tracking-widest opacity-40 font-bold">默认播放模式</label>
+                  </div>
+                  <div className="flex gap-2">
+                    {['loop', 'sequential', 'random'].map(mode => (
+                      <button
+                        key={mode}
+                        onClick={() => setMusicConfig({ ...musicConfig, defaultPlaybackMode: mode })}
+                        className={`flex-1 py-2 rounded-xl text-xs transition-all ${
+                          musicConfig.defaultPlaybackMode === mode
+                            ? 'bg-blue-500 shadow-md'
+                            : 'bg-white/5 opacity-40 hover:opacity-100'
+                        }`}
+                      >
+                        {mode === 'loop' ? '🔁 循环' : mode === 'sequential' ? '🔂 顺序' : '🔀 随机'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] uppercase tracking-widest opacity-40 font-bold">默认音量</label>
+                    <span className="text-blue-400 font-mono text-sm">{musicConfig.defaultVolume}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    value={musicConfig.defaultVolume}
+                    onChange={(e) => setMusicConfig({ ...musicConfig, defaultVolume: parseInt(e.target.value) })}
+                    min="0"
+                    max="100"
+                    step="5"
+                    className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] uppercase tracking-widest opacity-40 font-bold">白噪音音量</label>
+                    <span className="text-blue-400 font-mono text-sm">{musicConfig.ambientVolume}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    value={musicConfig.ambientVolume}
+                    onChange={(e) => setMusicConfig({ ...musicConfig, ambientVolume: parseInt(e.target.value) })}
+                    min="0"
+                    max="100"
+                    step="5"
+                    className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <label className="text-[10px] uppercase tracking-widest opacity-40 font-bold">白噪音链接 (MP3)</label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs opacity-60 w-12">🌊 海浪</span>
+                    <input
+                      type="text"
+                      value={musicConfig.ambientWavesUrl || ''}
+                      onChange={(e) => setMusicConfig({ ...musicConfig, ambientWavesUrl: e.target.value })}
+                      className="flex-1 bg-white/[0.03] rounded-xl px-3 py-2 text-xs outline-none border border-white/5 focus:border-blue-500/50 transition-all"
+                      placeholder="https://..."
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs opacity-60 w-12">🌧️ 雨声</span>
+                    <input
+                      type="text"
+                      value={musicConfig.ambientRainUrl || ''}
+                      onChange={(e) => setMusicConfig({ ...musicConfig, ambientRainUrl: e.target.value })}
+                      className="flex-1 bg-white/[0.03] rounded-xl px-3 py-2 text-xs outline-none border border-white/5 focus:border-blue-500/50 transition-all"
+                      placeholder="https://..."
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs opacity-60 w-12">🔥 篝火</span>
+                    <input
+                      type="text"
+                      value={musicConfig.ambientFireUrl || ''}
+                      onChange={(e) => setMusicConfig({ ...musicConfig, ambientFireUrl: e.target.value })}
+                      className="flex-1 bg-white/[0.03] rounded-xl px-3 py-2 text-xs outline-none border border-white/5 focus:border-blue-500/50 transition-all"
+                      placeholder="https://..."
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest opacity-40 font-bold mb-3">备注</label>
+                  <textarea
+                    value={musicConfig.remark || ''}
+                    onChange={(e) => setMusicConfig({ ...musicConfig, remark: e.target.value })}
+                    rows={3}
+                    className="w-full bg-white/[0.03] rounded-2xl p-4 text-sm outline-none border border-white/5 focus:border-blue-500/50 transition-all resize-none"
+                    placeholder="音乐功能备注信息..."
+                  />
+                </div>
+
+                <button
+                  onClick={handleSaveMusicConfig}
+                  className="w-full py-4 bg-white text-blue-900 rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-blue-50 transition-all shadow-xl active:scale-95"
+                >
+                  保存音乐配置
+                </button>
+              </div>
+
+              {/* 右侧：操作日志 */}
+              <div className="bg-white/10 backdrop-blur-xl rounded-[2rem] p-8 border border-white/5">
+                <div className="flex items-center gap-2 mb-6">
+                  <BarChart3 size={18} className="text-blue-400" />
+                  <h3 className="text-sm font-bold">最近操作记录</h3>
+                </div>
+                <div className="space-y-2 max-h-80 overflow-y-auto">
+                  {musicStats.recentLogs && musicStats.recentLogs.length > 0 ? (
+                    musicStats.recentLogs.map((log) => (
+                      <div key={log.id} className="p-3 rounded-xl bg-white/[0.02] text-xs">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className={`font-bold ${
+                            log.action === 'search' ? 'text-purple-400' :
+                            log.action === 'play' ? 'text-green-400' : 'text-red-400'
+                          }`}>
+                            {log.action === 'search' ? '🔍 搜索' : log.action === 'play' ? '▶️ 播放' : '❌ 错误'}
+                          </span>
+                          <span className="opacity-40">{log.CreateTime ? new Date(log.CreateTime).toLocaleString() : ''}</span>
+                        </div>
+                        <div className="opacity-60 truncate">{log.songName || '未知歌曲'}</div>
+                        {log.errorMessage && (
+                          <div className="text-red-400/60 text-[10px] mt-1 truncate">{log.errorMessage}</div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 opacity-40 text-xs">暂无操作记录</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'access-stats' && (
+          <div className="space-y-6">
+            {/* 统计卡片 */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
+                <div className="text-[10px] uppercase tracking-widest opacity-40 font-bold mb-2">总访问量</div>
+                <div className="text-3xl font-bold text-blue-400">{accessStats.totalVisits}</div>
+              </div>
+              <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
+                <div className="text-[10px] uppercase tracking-widest opacity-40 font-bold mb-2">今日访问</div>
+                <div className="text-3xl font-bold text-green-400">{accessStats.todayVisits}</div>
+              </div>
+              <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
+                <div className="text-[10px] uppercase tracking-widest opacity-40 font-bold mb-2">当前在线</div>
+                <div className="text-3xl font-bold text-purple-400">{accessStats.onlineUsers}</div>
+              </div>
+              <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
+                <div className="text-[10px] uppercase tracking-widest opacity-40 font-bold mb-2">今日独立IP</div>
+                <div className="text-3xl font-bold text-orange-400">{accessStats.uniqueIps}</div>
+              </div>
+            </div>
+
+            {/* 各页面在线人数 */}
+            {accessStats.pageOnlineUsers && Object.keys(accessStats.pageOnlineUsers).length > 0 && (
+              <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
+                <div className="text-[10px] uppercase tracking-widest opacity-40 font-bold mb-4">各页面在线人数</div>
+                <div className="flex flex-wrap gap-4">
+                  {Object.entries(accessStats.pageOnlineUsers).map(([page, count]) => (
+                    <div key={page} className="flex items-center gap-2 px-4 py-2 bg-white/5 rounded-xl">
+                      <span className="text-xs opacity-60">{page === 'home' ? '🏠 首页' : page === 'admin' ? '⚙️ 管理后台' : page}</span>
+                      <span className="text-lg font-bold text-blue-400">{count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 在线用户列表 */}
+            <div className="bg-white/10 backdrop-blur-xl rounded-[2rem] p-8 border border-white/5">
+              <div className="flex items-center gap-2 mb-6">
+                <Users size={18} className="text-blue-400" />
+                <h3 className="text-sm font-bold">最近活跃用户</h3>
+              </div>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {accessStats.recentUsers && accessStats.recentUsers.length > 0 ? (
+                  accessStats.recentUsers.map((user, i) => (
+                    <div key={i} className="p-3 rounded-xl bg-white/[0.02] text-xs flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Eye size={12} className="opacity-40" />
+                        <span className="font-mono">{user.ipAddress}</span>
+                      </div>
+                      <span className="opacity-40 text-[10px]">
+                        {user.lastSeen ? new Date(user.lastSeen).toLocaleString() : ''}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 opacity-40 text-xs">暂无数据</div>
+                )}
               </div>
             </div>
           </div>

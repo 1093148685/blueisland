@@ -34,6 +34,9 @@ builder.Services.AddScoped<ISqlSugarClient>(s =>
         db.CodeFirst.InitTables<AiModel>();
         db.CodeFirst.InitTables<AiConfig>();
         db.CodeFirst.InitTables<AuditLog>();
+        db.CodeFirst.InitTables<MusicConfig>();
+        db.CodeFirst.InitTables<MusicLog>();
+        db.CodeFirst.InitTables<AccessLog>();
     }
     catch { }
 

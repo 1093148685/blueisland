@@ -77,9 +77,30 @@ export const aiModelApi = {
   getAuditLogs: (page, pageSize) => api.get(`/ai-config/logs?page=${page}&pageSize=${pageSize}`),
 };
 
-// 音乐搜索
+// GD Studio 音乐 API
+const GD_MUSIC_API = 'https://music-api.gdstudio.xyz/api.php';
+
 export const musicApi = {
-  search: (name) => api.get('https://api.apiopen.top/searchMusic', { params: { name } }),
+  search: (name, source = 'netease') => api.get(GD_MUSIC_API, {
+    params: { types: 'search', source, name, count: 20, pages: 1 }
+  }),
+  getUrl: (id, source = 'netease', br = 320) => api.get(GD_MUSIC_API, {
+    params: { types: 'url', source, id, br }
+  }),
+  // 音乐配置（管理员）
+  getMusicConfig: () => api.get('/music-config'),
+  saveMusicConfig: (data) => api.post('/music-config', data),
+  getMusicStats: () => api.get('/music-config/stats'),
+  getMusicLogs: (page, pageSize) => api.get(`/music-config/logs?page=${page}&pageSize=${pageSize}`),
+  // 记录音乐操作（公开）
+  logMusicAction: (data) => api.post('/music-config/log', data),
+};
+
+// 访问统计相关
+export const accessApi = {
+  getStats: () => api.get('/access/stats'),
+  heartbeat: (page) => api.post('/access/heartbeat', { page }),
+  getOnlineUsers: () => api.get('/access/online'),
 };
 
 export default api;

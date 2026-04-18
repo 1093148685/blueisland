@@ -1,9 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Home, Lock, Music, Play, Pause, SkipForward, SkipBack, MessageCircleHeart, Ghost, Waves, CloudRain, Flame, Sparkles, Wind, Bot, Send, X } from 'lucide-react';
-import { messageApi, aiModelApi, spiritApi, musicApi } from '../api';
+import { Search, Home, Lock, Music, Play, Pause, SkipForward, SkipBack, MessageCircleHeart, Ghost, Waves, CloudRain, Flame, Sparkles, Wind, Bot, Send, X, Repeat, Repeat1, Shuffle } from 'lucide-react';
+import { messageApi, aiModelApi, spiritApi, musicApi, accessApi } from '../api';
 
 const AMBIENT_BASE_URL = '/assets/ambient';
+
+// 格式化时间显示
+const formatTime = (seconds) => {
+  if (!seconds || isNaN(seconds)) return '00:00';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+};
 
 const defaultPlaylist = [];
 
@@ -237,12 +245,26 @@ export default function HomePage() {
   const [searchCode, setSearchCode] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
   const [isMusicOpen, setIsMusicOpen] = useState(false);
-  const [currentSongIndex, setCurrentSongIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [musicSearch, setMusicSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [playlist, setPlaylist] = useState(defaultPlaylist);
+  const [playlist, setPlaylist] = useState(() => {
+    // 从localStorage恢复播放列表
+    try {
+      const saved = localStorage.getItem('music_playlist');
+      return saved ? JSON.parse(saved) : defaultPlaylist;
+    } catch { return defaultPlaylist; }
+  });
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [currentLyric, setCurrentLyric] = useState('');
+  const [currentSongIndex, setCurrentSongIndex] = useState(() => {
+    try { return parseInt(localStorage.getItem('music_current_index') || '0'); } catch { return 0; }
+  });
+  const [playbackMode, setPlaybackMode] = useState(() => {
+    try { return localStorage.getItem('music_playback_mode') || 'loop'; } catch { return 'loop'; }
+  });
   const [autoAuditEnabled, setAutoAuditEnabled] = useState(true);
   const [currentHour, setCurrentHour] = useState(new Date().getHours());
   const audioRef = useRef(null);
@@ -257,6 +279,20 @@ export default function HomePage() {
 
   // 白噪音状态
   const [ambientSounds, setAmbientSounds] = useState({ waves: false, rain: false, fire: false });
+
+  // 音乐配置（白噪音URL等）
+  const [musicConfig, setMusicConfig] = useState({
+    ambientWavesUrl: '',
+    ambientRainUrl: '',
+    ambientFireUrl: '',
+    enabled: true,
+    ambientEnabled: true,
+    ambientVolume: 50
+  });
+
+  // 在线人数状态
+  const [onlineUsers, setOnlineUsers] = useState(0);
+  const [homePageUsers, setHomePageUsers] = useState(0);
 
   // 岛屿之灵状态
   const [isSpiritOpen, setIsSpiritOpen] = useState(false);
@@ -277,6 +313,49 @@ export default function HomePage() {
       }
     };
     loadAuditConfig();
+  }, []);
+
+  // 加载音乐配置
+  useEffect(() => {
+    const loadMusicConfig = async () => {
+      try {
+        const result = await musicApi.getMusicConfig();
+        if (result.code === 200) {
+          setMusicConfig({
+            ambientWavesUrl: result.data.ambientWavesUrl || '',
+            ambientRainUrl: result.data.ambientRainUrl || '',
+            ambientFireUrl: result.data.ambientFireUrl || '',
+            enabled: result.data.enabled ?? true,
+            ambientEnabled: result.data.ambientEnabled ?? true,
+            ambientVolume: result.data.ambientVolume ?? 50
+          });
+        }
+      } catch (error) {
+        console.error('获取音乐配置失败:', error);
+      }
+    };
+    loadMusicConfig();
+  }, []);
+
+  // 心跳 - 保持在线状态并获取在线人数
+  useEffect(() => {
+    const sendHeartbeat = async () => {
+      try {
+        await accessApi.heartbeat('home');
+        const result = await accessApi.getStats();
+        if (result.code === 200) {
+          setOnlineUsers(result.data.onlineUsers || 0);
+          const pageUsers = result.data.pageOnlineUsers || {};
+          setHomePageUsers(pageUsers['home'] || 0);
+        }
+      } catch (error) {
+        console.error('心跳失败:', error);
+      }
+    };
+
+    sendHeartbeat();
+    const interval = setInterval(sendHeartbeat, 60000); // 每分钟发送一次
+    return () => clearInterval(interval);
   }, []);
 
   // 加载今日寄语
@@ -314,6 +393,27 @@ export default function HomePage() {
       return () => clearTimeout(timer);
     }
   }, [auditError]);
+
+  // 保存播放列表到localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('music_playlist', JSON.stringify(playlist));
+    } catch {}
+  }, [playlist]);
+
+  // 保存当前播放索引到localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('music_current_index', currentSongIndex.toString());
+    } catch {}
+  }, [currentSongIndex]);
+
+  // 保存播放模式到localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('music_playback_mode', playbackMode);
+    } catch {}
+  }, [playbackMode]);
 
   // 歌曲切换时自动播放
   useEffect(() => {
@@ -353,27 +453,112 @@ export default function HomePage() {
   const handleMusicSearch = async () => {
     if (!musicSearch.trim()) return;
     setIsSearching(true);
+    setSearchResults([]);
     try {
       const res = await musicApi.search(musicSearch);
-      if (res.code === 200 && res.result) {
-        setSearchResults(res.result.slice(0, 8));
+      // GD Studio 返回格式: { info: [...], ... } 或直接是数组
+      let results = [];
+      if (Array.isArray(res)) {
+        results = res;
+      } else if (res.info && Array.isArray(res.info)) {
+        results = res.info;
+      }
+      if (results.length > 0) {
+        setSearchResults(results.slice(0, 8));
+      }
+      // 记录搜索日志
+      try {
+        await musicApi.logMusicAction({
+          action: 'search',
+          songName: musicSearch,
+          status: results.length > 0 ? 'success' : 'failed'
+        });
+      } catch (logErr) {
+        console.error('记录搜索日志失败:', logErr);
       }
     } catch (err) {
       console.error('搜索失败:', err);
+      try {
+        await musicApi.logMusicAction({
+          action: 'search',
+          songName: musicSearch,
+          status: 'failed',
+          errorMessage: err.message
+        });
+      } catch (logErr) {
+        console.error('记录搜索日志失败:', logErr);
+      }
     } finally {
       setIsSearching(false);
     }
   };
 
   // 播放搜索到的歌曲
-  const playSearchedSong = (song) => {
-    // 直接播放，不添加到默认播放列表
-    setCurrentSongIndex(-1);
-    setPlaylist([{ title: song.title, artist: song.author, url: song.url }]);
-    setIsPlaying(true);
-    setSearchResults([]);
-    setMusicSearch('');
-    setTimeout(() => audioRef.current?.play(), 100);
+  const playSearchedSong = async (song) => {
+    try {
+      const res = await musicApi.getUrl(song.id, song.source || 'netease', 320);
+      let url = '';
+      if (res.url) {
+        url = res.url;
+      } else if (res.data && res.data.url) {
+        url = res.data.url;
+      }
+      const newSong = { title: song.name || song.title, artist: song.artist, url };
+      setPlaylist(prev => [...prev, newSong]);
+      const newIndex = playlist.length;
+      setCurrentSongIndex(newIndex);
+      setIsPlaying(true);
+      setSearchResults([]);
+      setMusicSearch('');
+      setCurrentLyric('');
+      setCurrentTime(0);
+      setDuration(0);
+      setTimeout(() => audioRef.current?.play(), 100);
+      // 记录播放日志
+      try {
+        await musicApi.logMusicAction({
+          action: 'play',
+          songName: song.name || song.title,
+          songId: song.id?.toString(),
+          source: song.source || 'netease',
+          status: url ? 'success' : 'failed'
+        });
+      } catch (logErr) {
+        console.error('记录播放日志失败:', logErr);
+      }
+    } catch (err) {
+      console.error('获取歌曲URL失败:', err);
+      try {
+        await musicApi.logMusicAction({
+          action: 'play',
+          songName: song.name || song.title,
+          songId: song.id?.toString(),
+          source: song.source || 'netease',
+          status: 'failed',
+          errorMessage: err.message
+        });
+      } catch (logErr) {
+        console.error('记录播放日志失败:', logErr);
+      }
+    }
+  };
+
+  // 从播放列表删除歌曲
+  const removeFromPlaylist = (index) => {
+    setPlaylist(prev => prev.filter((_, i) => i !== index));
+    if (index === currentSongIndex) {
+      // 删除的是当前播放的，切到下一首或停止
+      if (playlist.length > 1) {
+        const nextIndex = index >= playlist.length - 1 ? 0 : index;
+        setCurrentSongIndex(nextIndex);
+      } else {
+        setIsPlaying(false);
+        setCurrentSongIndex(0);
+      }
+    } else if (index < currentSongIndex) {
+      // 删除的是当前歌曲之前的，调整索引
+      setCurrentSongIndex(currentSongIndex - 1);
+    }
   };
 
   // 切换白噪音
@@ -382,9 +567,21 @@ export default function HomePage() {
       const newState = { ...prev, [type]: !prev[type] };
       // 控制音频播放
       const audio = ambientRef.current[type];
+      // 获取对应的URL
+      const url = type === 'waves' ? musicConfig.ambientWavesUrl :
+                   type === 'rain' ? musicConfig.ambientRainUrl :
+                   musicConfig.ambientFireUrl;
       if (audio) {
         if (newState[type]) {
-          audio.play().catch(() => {});
+          if (url) {
+            // 如果当前src不是目标url，需要重新加载
+            if (audio.src !== url && url) {
+              audio.src = url;
+              audio.load();
+            }
+            audio.volume = (musicConfig.ambientVolume ?? 50) / 100;
+            audio.play().catch(err => console.error('播放失败:', err));
+          }
         } else {
           audio.pause();
         }
@@ -392,6 +589,17 @@ export default function HomePage() {
       return newState;
     });
   };
+
+  // 更新白噪音音量（当音量设置变化时）
+  useEffect(() => {
+    const volume = (musicConfig.ambientVolume ?? 50) / 100;
+    ['waves', 'rain', 'fire'].forEach(type => {
+      const audio = ambientRef.current[type];
+      if (audio && ambientSounds[type]) {
+        audio.volume = volume;
+      }
+    });
+  }, [musicConfig.ambientVolume, ambientSounds]);
 
   // 加载留言后分析岛屿情绪
   useEffect(() => {
@@ -571,8 +779,9 @@ export default function HomePage() {
               <h2 className="mt-8 text-sm text-blue-100/90 tracking-widest font-serif text-center px-4 italic leading-relaxed">
                 {islandQuote}
               </h2>
-              <div className="mt-2 text-[9px] opacity-40 uppercase tracking-widest">
-                岛屿当前：{islandMood.weather}
+              <div className="mt-2 text-[9px] opacity-40 uppercase tracking-widest flex justify-center gap-4">
+                <span>岛屿当前：{islandMood.weather}</span>
+                <span>在线：{onlineUsers}</span>
               </div>
             </div>
             <div className="w-full space-y-6">
@@ -693,8 +902,12 @@ export default function HomePage() {
                   onChange={e => setSearchCode(e.target.value)}
                   onKeyPress={e => e.key === 'Enter' && handleSearch()}
                   placeholder="寻找那句暗语..."
-                  className="w-full pl-6 pr-14 py-4 bg-white/10 backdrop-blur-xl border border-white/20 rounded-full outline-none focus:ring-2 focus:ring-blue-400 transition-all shadow-xl placeholder:text-blue-100/20"
+                  className="w-full pl-6 pr-32 py-4 bg-white/10 backdrop-blur-xl border border-white/20 rounded-full outline-none focus:ring-2 focus:ring-blue-400 transition-all shadow-xl placeholder:text-blue-100/20"
                 />
+                <div className="absolute right-20 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px] opacity-40">
+                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                  {homePageUsers}
+                </div>
                 <button
                   onClick={handleSearch}
                   className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 bg-blue-400/40 hover:bg-blue-400/60 rounded-full flex items-center justify-center transition-all cursor-pointer"
@@ -794,13 +1007,42 @@ export default function HomePage() {
       <audio
         ref={audioRef}
         src={playlist[currentSongIndex]?.url}
-        onEnded={() => setCurrentSongIndex((currentSongIndex + 1) % playlist.length)}
+        onEnded={() => {
+          if (playbackMode === 'loop') {
+            // 循环：当前歌曲重新播放
+            audioRef.current.currentTime = 0;
+            audioRef.current.play();
+          } else if (playbackMode === 'sequential') {
+            // 顺序：播完就停止
+            if (currentSongIndex < playlist.length - 1) {
+              setCurrentSongIndex(currentSongIndex + 1);
+            } else {
+              setIsPlaying(false);
+            }
+          } else if (playbackMode === 'random') {
+            // 随机：随机选一首播放
+            const randomIndex = Math.floor(Math.random() * playlist.length);
+            setCurrentSongIndex(randomIndex);
+          }
+          setCurrentLyric('');
+        }}
+        onTimeUpdate={() => {
+          if (audioRef.current) {
+            setCurrentTime(audioRef.current.currentTime);
+            setDuration(audioRef.current.duration || 0);
+          }
+        }}
+        onLoadedMetadata={() => {
+          if (audioRef.current) {
+            setDuration(audioRef.current.duration);
+          }
+        }}
       />
 
-      {/* 白噪音音频 */}
-      <audio ref={el => ambientRef.current.waves = el} src={`${AMBIENT_BASE_URL}/waves.mp3`} loop />
-      <audio ref={el => ambientRef.current.rain = el} src={`${AMBIENT_BASE_URL}/rain.mp3`} loop />
-      <audio ref={el => ambientRef.current.fire = el} src={`${AMBIENT_BASE_URL}/fire.mp3`} loop />
+      {/* 白噪音音频 - 使用配置的URL或本地文件 */}
+      <audio ref={el => ambientRef.current.waves = el} src={musicConfig.ambientWavesUrl} loop />
+      <audio ref={el => ambientRef.current.rain = el} src={musicConfig.ambientRainUrl} loop />
+      <audio ref={el => ambientRef.current.fire = el} src={musicConfig.ambientFireUrl} loop />
 
       {/* 音乐播放面板 */}
       <div className={`fixed bottom-28 right-6 z-50 transition-all duration-500 ${isMusicOpen ? 'w-72 opacity-100 translate-y-0 scale-100' : 'w-0 h-0 opacity-0 pointer-events-none overflow-hidden'}`}>
@@ -817,8 +1059,26 @@ export default function HomePage() {
 
           <div className="p-4 space-y-4">
             {/* 播放控制 */}
-            <div className="flex items-center justify-center gap-6">
-              <button onClick={() => setCurrentSongIndex((currentSongIndex - 1 + playlist.length) % playlist.length)} className="opacity-40 hover:opacity-100 transition-opacity"><SkipBack size={18}/></button>
+            <div className="flex items-center justify-center gap-4">
+              {/* 播放模式切换 */}
+              <button onClick={() => {
+                const modes = ['loop', 'sequential', 'random'];
+                const currentIdx = modes.indexOf(playbackMode);
+                setPlaybackMode(modes[(currentIdx + 1) % modes.length]);
+              }} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-all">
+                {playbackMode === 'loop' ? <Repeat size={18} className={playbackMode === 'loop' ? 'text-blue-400' : ''}/> : playbackMode === 'sequential' ? <Repeat1 size={18} className="text-blue-400" /> : <Shuffle size={18} className="text-blue-400" />}
+              </button>
+              <button onClick={() => {
+                let prevIndex;
+                if (playbackMode === 'random') {
+                  prevIndex = Math.floor(Math.random() * playlist.length);
+                } else {
+                  prevIndex = (currentSongIndex - 1 + playlist.length) % playlist.length;
+                }
+                setCurrentSongIndex(prevIndex);
+                setIsPlaying(true);
+                setTimeout(() => audioRef.current?.play(), 100);
+              }} className="w-8 h-8 flex items-center justify-center opacity-40 hover:opacity-100 transition-opacity"><SkipBack size={18}/></button>
               <button onClick={() => {
                 const audio = audioRef.current;
                 if (audio) {
@@ -832,7 +1092,55 @@ export default function HomePage() {
               }} className="w-10 h-10 bg-white text-[#05162a] rounded-full flex items-center justify-center transition-transform active:scale-90">
                 {isPlaying ? <Pause size={20}/> : <Play size={20} className="ml-1"/>}
               </button>
-              <button onClick={() => setCurrentSongIndex((currentSongIndex + 1) % playlist.length)} className="opacity-40 hover:opacity-100 transition-opacity"><SkipForward size={18}/></button>
+              <button onClick={() => {
+                let nextIndex;
+                if (playbackMode === 'random') {
+                  nextIndex = Math.floor(Math.random() * playlist.length);
+                } else {
+                  nextIndex = (currentSongIndex + 1) % playlist.length;
+                }
+                setCurrentSongIndex(nextIndex);
+                setIsPlaying(true);
+                setTimeout(() => audioRef.current?.play(), 100);
+              }} className="w-8 h-8 flex items-center justify-center opacity-40 hover:opacity-100 transition-opacity"><SkipForward size={18}/></button>
+            </div>
+
+            {/* 进度条 */}
+            <div className="space-y-1">
+              <input
+                type="range"
+                min="0"
+                max={duration || 0}
+                value={currentTime}
+                onChange={(e) => {
+                  const time = Number(e.target.value);
+                  setCurrentTime(time);
+                  if (audioRef.current) {
+                    audioRef.current.currentTime = time;
+                  }
+                }}
+                className="w-full h-1 rounded-full appearance-none cursor-pointer bg-white/10 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-lg"
+                style={{
+                  background: duration ? `linear-gradient(to right, #60a5fa ${(currentTime / duration) * 100}%, rgba(255,255,255,0.1) ${(currentTime / duration) * 100}%)` : 'rgba(255,255,255,0.1)',
+                }}
+              />
+              <div className="flex justify-between text-[9px] opacity-40">
+                <span>{formatTime(currentTime)}</span>
+                <span>{formatTime(duration)}</span>
+              </div>
+            </div>
+
+            {/* 歌词显示 */}
+            <div className="min-h-[40px] text-center">
+              {currentLyric ? (
+                <div className="text-xs text-blue-200/80 font-serif italic leading-relaxed animate-pulse">
+                  {currentLyric}
+                </div>
+              ) : (
+                <div className="text-[10px] opacity-30 italic">
+                  {playlist[currentSongIndex]?.url ? '该歌曲暂无歌词' : '选择一个曲目播放'}
+                </div>
+              )}
             </div>
 
             {/* 白噪音 ASMR 叠播 */}
@@ -876,22 +1184,39 @@ export default function HomePage() {
             </div>
 
             <div className="space-y-1 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
-               {(searchResults.length > 0 ? searchResults : playlist).map((song, i) => (
-                 <div key={i} onClick={() => {
-                   if (searchResults.length > 0) {
-                     playSearchedSong(song);
-                   } else {
-                     setCurrentSongIndex(i);
-                     setIsPlaying(true);
-                     setTimeout(() => audioRef.current?.play(), 100);
-                   }
-                 }} className={`text-[9px] p-2 rounded-xl cursor-pointer transition-colors ${currentSongIndex === i ? 'bg-blue-500/30 text-blue-200' : 'hover:bg-white/5 opacity-40 hover:opacity-100'}`}>
-                   <div className="flex justify-between">
-                     <span>{song.title}</span>
-                     <span className="opacity-40">{song.author || ''}</span>
+               {isSearching ? (
+                 <div className="text-[10px] opacity-40 text-center py-4 italic">正在搜索...</div>
+               ) : searchResults.length > 0 ? (
+                 searchResults.map((song, i) => (
+                   <div key={i} onClick={() => playSearchedSong(song)} className={`text-[9px] px-1 py-1.5 rounded-lg cursor-pointer transition-colors ${currentSongIndex === i && searchResults.length > 0 ? 'bg-blue-500/30 text-blue-200' : 'hover:bg-white/5 opacity-40 hover:opacity-100'}`}>
+                     <div className="flex justify-between items-center gap-1">
+                       <span className="truncate">{song.name || song.title}</span>
+                       <span className="opacity-40 truncate text-[8px]">{song.artist || song.author || ''}</span>
+                     </div>
                    </div>
-                 </div>
-               ))}
+                 ))
+               ) : musicSearch.trim() && !isSearching ? (
+                 <div className="text-[10px] opacity-40 text-center py-4 italic">未收录该歌曲，请尝试其他曲目</div>
+               ) : (
+                 playlist.length === 0 ? (
+                   <div className="text-[10px] opacity-30 text-center py-4 italic">播放列表为空，搜索添加歌曲</div>
+                 ) : (
+                   playlist.map((song, i) => (
+                     <div key={i} className={`group flex items-center gap-1 px-1 py-1.5 rounded-lg cursor-pointer transition-colors ${currentSongIndex === i ? 'bg-blue-500/30 text-blue-200' : 'hover:bg-white/5 opacity-40 hover:opacity-100'}`}>
+                       <span onClick={() => {
+                         setCurrentSongIndex(i);
+                         setIsPlaying(true);
+                         setTimeout(() => audioRef.current?.play(), 100);
+                       }} className="flex-1 truncate text-[9px] leading-tight">{song.name || song.title}</span>
+                       <span className="opacity-40 truncate text-[8px]">{song.artist || song.author || ''}</span>
+                       <button onClick={(e) => {
+                         e.stopPropagation();
+                         removeFromPlaylist(i);
+                       }} className="opacity-0 group-hover:opacity-40 hover:!opacity-100 transition-opacity ml-1 text-[8px] leading-tight">✕</button>
+                     </div>
+                   ))
+                 )
+               )}
             </div>
           </div>
         </div>
