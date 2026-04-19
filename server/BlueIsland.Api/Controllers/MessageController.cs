@@ -29,7 +29,7 @@ public class MessageController : ControllerBase
         var messages = await _db.Queryable<Message>()
             .Where(it => !it.IsDeleted)
             .OrderByDescending(it => it.CreateTime)
-            .Select(it => new MessageDto
+            .Select(it => new
             {
                 Id = it.Id,
                 Content = it.Content,
@@ -41,14 +41,97 @@ public class MessageController : ControllerBase
                 IpLocation = it.IpLocation,
                 DeviceType = it.DeviceType,
                 Browser = it.Browser,
-                IsUnlocked = false
+                IsUnlocked = false,
+                Replies = it.Replies,
+                ReportCount = it.ReportCount,
+                ResonanceCount = it.ResonanceCount,
+                Email = it.Email
             })
             .ToListAsync();
 
+        var result = messages.Select(m => new MessageDto
+        {
+            Id = m.Id,
+            Content = m.Content,
+            SecretContent = m.SecretContent,
+            AvatarType = m.AvatarType,
+            AvatarId = m.AvatarId,
+            AvatarUrl = m.AvatarUrl,
+            CreateTime = m.CreateTime,
+            IpLocation = m.IpLocation,
+            DeviceType = m.DeviceType,
+            Browser = m.Browser,
+            IsUnlocked = m.IsUnlocked,
+            Replies = ParseReplies(m.Replies),
+            ReportCount = m.ReportCount,
+            ResonanceCount = m.ResonanceCount,
+            Email = m.Email
+        }).ToList();
+
         return Result<MessageListResultDto>.Ok(new MessageListResultDto
         {
-            Total = messages.Count,
-            Messages = messages
+            Total = result.Count,
+            Messages = result
+        });
+    }
+
+    /// <summary>
+    /// 拾取暗号为 blueisland 的留言
+    /// </summary>
+    [HttpGet("pickup")]
+    public async Task<Result<MessageListResultDto>> PickupMessages()
+    {
+        var hashedCode = AesUtil.HashSha256("blueisland");
+
+        var messages = await _db.Queryable<Message>()
+            .Where(it => !it.IsDeleted && it.SecretCode == hashedCode)
+            .OrderByDescending(it => it.CreateTime)
+            .Select(it => new
+            {
+                Id = it.Id,
+                Content = it.Content,
+                SecretContent = it.SecretContent,
+                SecretCode = "blueisland",
+                AiEcho = it.AiEcho,
+                AvatarType = it.AvatarType,
+                AvatarId = it.AvatarId,
+                AvatarUrl = it.AvatarUrl,
+                CreateTime = it.CreateTime,
+                IpLocation = it.IpLocation,
+                DeviceType = it.DeviceType,
+                Browser = it.Browser,
+                Replies = it.Replies,
+                ReportCount = it.ReportCount,
+                ResonanceCount = it.ResonanceCount,
+                Email = it.Email
+            })
+            .ToListAsync();
+
+        var result = messages.Select(m => new MessageDto
+        {
+            Id = m.Id,
+            Content = m.Content,
+            SecretContent = m.SecretContent,
+            SecretCode = m.SecretCode,
+            AiEcho = m.AiEcho,
+            AvatarType = m.AvatarType,
+            AvatarId = m.AvatarId,
+            AvatarUrl = m.AvatarUrl,
+            CreateTime = m.CreateTime,
+            IpLocation = m.IpLocation,
+            DeviceType = m.DeviceType,
+            Browser = m.Browser,
+            IsUnlocked = true,
+            Replies = ParseReplies(m.Replies),
+            ReportCount = m.ReportCount,
+            ResonanceCount = m.ResonanceCount,
+            Email = m.Email
+        }).ToList();
+
+        return Result<MessageListResultDto>.Ok(new MessageListResultDto
+        {
+            Total = result.Count,
+            Messages = result
         });
     }
 
@@ -63,7 +146,7 @@ public class MessageController : ControllerBase
         var messages = await _db.Queryable<Message>()
             .Where(it => !it.IsDeleted && it.SecretCode == hashedCode)
             .OrderByDescending(it => it.CreateTime)
-            .Select(it => new MessageDto
+            .Select(it => new
             {
                 Id = it.Id,
                 Content = it.Content,
@@ -77,14 +160,38 @@ public class MessageController : ControllerBase
                 IpLocation = it.IpLocation,
                 DeviceType = it.DeviceType,
                 Browser = it.Browser,
-                IsUnlocked = true
+                Replies = it.Replies,
+                ReportCount = it.ReportCount,
+                ResonanceCount = it.ResonanceCount,
+                Email = it.Email
             })
             .ToListAsync();
 
+        var result = messages.Select(m => new MessageDto
+        {
+            Id = m.Id,
+            Content = m.Content,
+            SecretContent = m.SecretContent,
+            SecretCode = m.SecretCode,
+            AiEcho = m.AiEcho,
+            AvatarType = m.AvatarType,
+            AvatarId = m.AvatarId,
+            AvatarUrl = m.AvatarUrl,
+            CreateTime = m.CreateTime,
+            IpLocation = m.IpLocation,
+            DeviceType = m.DeviceType,
+            Browser = m.Browser,
+            IsUnlocked = true,
+            Replies = ParseReplies(m.Replies),
+            ReportCount = m.ReportCount,
+            ResonanceCount = m.ResonanceCount,
+            Email = m.Email
+        }).ToList();
+
         return Result<MessageListResultDto>.Ok(new MessageListResultDto
         {
-            Total = messages.Count,
-            Messages = messages
+            Total = result.Count,
+            Messages = result
         });
     }
 
@@ -139,7 +246,8 @@ public class MessageController : ControllerBase
             IpLocation = ipLocation,
             DeviceType = deviceType,
             Browser = browser,
-            IsDeleted = false
+            IsDeleted = false,
+            Email = request.Email
         };
 
         await _db.Insertable(message).ExecuteCommandAsync();
@@ -156,7 +264,9 @@ public class MessageController : ControllerBase
             IpLocation = message.IpLocation,
             DeviceType = message.DeviceType,
             Browser = message.Browser,
-            IsUnlocked = false
+            IsUnlocked = false,
+            ResonanceCount = 0,
+            Email = message.Email
         });
     }
 
@@ -217,27 +327,32 @@ public class MessageController : ControllerBase
             .Where(it => !it.IsDeleted)
             .CountAsync();
 
-        var messages = await _db.Queryable<Message>()
+        var rawMessages = await _db.Queryable<Message>()
             .Where(it => !it.IsDeleted)
             .OrderByDescending(it => it.CreateTime)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(it => new MessageDto
-            {
-                Id = it.Id,
-                Content = it.Content,
-                SecretContent = it.SecretContent,
-                AvatarType = it.AvatarType,
-                AvatarId = it.AvatarId,
-                AvatarUrl = it.AvatarUrl,
-                CreateTime = it.CreateTime,
-                IpAddress = it.IpAddress,
-                IpLocation = it.IpLocation,
-                DeviceType = it.DeviceType,
-                Browser = it.Browser,
-                IsUnlocked = true
-            })
             .ToListAsync();
+
+        var messages = rawMessages.Select(m => new MessageDto
+        {
+            Id = m.Id,
+            Content = m.Content,
+            SecretContent = m.SecretContent,
+            AvatarType = m.AvatarType,
+            AvatarId = m.AvatarId,
+            AvatarUrl = m.AvatarUrl,
+            CreateTime = m.CreateTime,
+            IpAddress = m.IpAddress,
+            IpLocation = m.IpLocation,
+            DeviceType = m.DeviceType,
+            Browser = m.Browser,
+            IsUnlocked = true,
+            Replies = ParseReplies(m.Replies),
+            ReportCount = m.ReportCount,
+            ResonanceCount = m.ResonanceCount,
+            Email = m.Email
+        }).ToList();
 
         return Result<MessageListResultDto>.Ok(new MessageListResultDto
         {
@@ -575,5 +690,163 @@ public class MessageController : ControllerBase
             weather = "微风",
             intensity = 0.8
         };
+    }
+
+    /// <summary>
+    /// 添加回复
+    /// </summary>
+    [HttpPost("{msgId}/reply")]
+    [AllowAnonymous]
+    public async Task<Result> AddReply(long msgId, [FromBody] AddReplyRequest request)
+    {
+        try
+        {
+            var message = await _db.Queryable<Message>()
+                .Where(it => it.Id == msgId && !it.IsDeleted)
+                .FirstAsync();
+
+            if (message == null)
+            {
+                return Result.Fail("留言不存在");
+            }
+
+            // 解析现有回复
+            var replies = new List<ReplyDto>();
+            if (!string.IsNullOrEmpty(message.Replies))
+            {
+                try
+                {
+                    replies = System.Text.Json.JsonSerializer.Deserialize<List<ReplyDto>>(message.Replies) ?? new();
+                }
+                catch
+                {
+                    replies = new();
+                }
+            }
+
+            // 添加新回复
+            replies.Add(new ReplyDto
+            {
+                Content = request.Content,
+                Author = $"User-{DateTime.Now.Ticks % 10000}",
+                Time = DateTime.Now.ToString("yyyy-MM-dd HH:mm")
+            });
+
+            // 更新回复列表
+            message.Replies = System.Text.Json.JsonSerializer.Serialize(replies);
+            await _db.Updateable(message).ExecuteCommandAsync();
+
+            return Result.Ok();
+        }
+        catch (Exception ex)
+        {
+            return Result.Fail(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 举报留言
+    /// </summary>
+    [HttpPost("{msgId}/report")]
+    [AllowAnonymous]
+    public async Task<Result> ReportMessage(long msgId)
+    {
+        try
+        {
+            var message = await _db.Queryable<Message>()
+                .Where(it => it.Id == msgId && !it.IsDeleted)
+                .FirstAsync();
+
+            if (message == null)
+            {
+                return Result.Fail("留言不存在");
+            }
+
+            message.ReportCount = message.ReportCount + 1;
+            await _db.Updateable(message).ExecuteCommandAsync();
+
+            return Result.Ok();
+        }
+        catch (Exception ex)
+        {
+            return Result.Fail(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 共鸣（点赞）留言
+    /// </summary>
+    [HttpPost("{msgId}/resonance")]
+    [AllowAnonymous]
+    public async Task<Result<MessageDto>> ResonanceMessage(long msgId)
+    {
+        try
+        {
+            var message = await _db.Queryable<Message>()
+                .Where(it => it.Id == msgId && !it.IsDeleted)
+                .FirstAsync();
+
+            if (message == null)
+            {
+                return Result<MessageDto>.Fail("留言不存在");
+            }
+
+            message.ResonanceCount = message.ResonanceCount + 1;
+            await _db.Updateable(message).ExecuteCommandAsync();
+
+            return Result<MessageDto>.Ok(new MessageDto
+            {
+                Id = message.Id,
+                ResonanceCount = message.ResonanceCount
+            });
+        }
+        catch (Exception ex)
+        {
+            return Result<MessageDto>.Fail(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 重置留言举报数
+    /// </summary>
+    [HttpPut("admin/{id}/reset-report")]
+    [Authorize(Roles = "admin")]
+    public async Task<Result> ResetReportCount(long id)
+    {
+        try
+        {
+            var message = await _db.Queryable<Message>()
+                .Where(it => it.Id == id && !it.IsDeleted)
+                .FirstAsync();
+
+            if (message == null)
+            {
+                return Result.Fail("留言不存在");
+            }
+
+            message.ReportCount = 0;
+            await _db.Updateable(message).ExecuteCommandAsync();
+
+            return Result.Ok();
+        }
+        catch (Exception ex)
+        {
+            return Result.Fail(ex.Message);
+        }
+    }
+
+    private List<ReplyDto> ParseReplies(string? repliesJson)
+    {
+        if (string.IsNullOrEmpty(repliesJson))
+            return new List<ReplyDto>();
+
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<List<ReplyDto>>(repliesJson) ?? new List<ReplyDto>();
+        }
+        catch
+        {
+            return new List<ReplyDto>();
+        }
     }
 }

@@ -16,6 +16,17 @@ public class MessageDto
     public string? DeviceType { get; set; }
     public string? Browser { get; set; }
     public bool IsUnlocked { get; set; }
+    public List<ReplyDto> Replies { get; set; } = new();
+    public int ReportCount { get; set; }
+    public int ResonanceCount { get; set; }
+    public string? Email { get; set; }
+}
+
+public class ReplyDto
+{
+    public string Content { get; set; } = string.Empty;
+    public string Author { get; set; } = string.Empty;
+    public string Time { get; set; } = string.Empty;
 }
 
 public class CreateMessageRequest
@@ -30,6 +41,7 @@ public class CreateMessageRequest
     public string? IpLocation { get; set; }
     public string? DeviceType { get; set; }
     public string? Browser { get; set; }
+    public string? Email { get; set; }
 }
 
 public class QueryMessageRequest
@@ -51,4 +63,9 @@ public class UpdateMessageRequest
 public class AnalyzeMoodRequest
 {
     public string Context { get; set; } = string.Empty;
+}
+
+public class AddReplyRequest
+{
+    public string Content { get; set; } = string.Empty;
 }

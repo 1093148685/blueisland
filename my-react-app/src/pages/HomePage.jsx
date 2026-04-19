@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Home, Lock, Music, Play, Pause, SkipForward, SkipBack, MessageCircleHeart, Ghost, Waves, CloudRain, Flame, Sparkles, Wind, Bot, Send, X, Repeat, Repeat1, Shuffle } from 'lucide-react';
-import { messageApi, aiModelApi, spiritApi, musicApi, accessApi } from '../api';
+import { Search, Home, Lock, Music, Play, Pause, SkipForward, SkipBack, MessageCircleHeart, Ghost, Waves, CloudRain, Flame, Sparkles, Wind, Bot, Send, X, Repeat, Repeat1, Shuffle, MessageSquare, CornerDownRight, ShieldAlert, AlertTriangle, ZapOff, Heart, Mail, Loader2, Compass, Anchor } from 'lucide-react';
+import { messageApi, aiModelApi, spiritApi, musicApi, accessApi, emailConfigApi } from '../api';
 
 const AMBIENT_BASE_URL = '/assets/ambient';
 
@@ -238,6 +238,108 @@ const IslandCanvas = () => {
   return <canvas ref={canvasRef} className="fixed inset-0 z-0 bg-[#010812]" />;
 };
 
+/**
+ * 回复组件 (集成在卡片内部)
+ */
+const ReplyEcho = ({ msgId, replies, onReplySubmit, isBlocked }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [text, setText] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  // 生成4位简短ID
+  const generateShortId = (seed) => {
+    if (!seed) return Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) {
+      hash = ((hash << 5) - hash) + seed.charCodeAt(i);
+      hash = hash & hash;
+    }
+    return Math.abs(hash % 10000).toString().padStart(4, '0');
+  };
+
+  const handleSubmit = async () => {
+    if (!text.trim() || loading || isBlocked) return;
+    setLoading(true);
+    try {
+      await onReplySubmit(msgId, text);
+      setText('');
+    } catch (error) {
+      console.error("回复失败:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 如果被屏蔽，不显示回复交互界面
+  if (isBlocked) {
+    return (
+      <div className="mt-4 pt-4 border-t border-dashed border-white/10 flex items-center justify-center gap-2 opacity-30">
+        <ZapOff size={12} />
+        <span className="text-[10px] tracking-widest text-blue-300/40">该内容的音轨已断开，无法共鸣</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 pt-4 border-t border-white/5">
+      {/* 统计与展开控制 */}
+      <div className="flex justify-between items-center mb-3">
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="group flex items-center gap-2 text-[10px] transition-all text-blue-300/60 hover:text-blue-200"
+        >
+          <div className={`p-1.5 rounded-lg transition-colors ${isExpanded ? 'bg-blue-500/20' : 'bg-transparent'}`}>
+            <MessageSquare size={12} className={isExpanded ? 'animate-pulse' : ''} />
+          </div>
+          <span className="font-medium tracking-wider">
+            {replies?.length || 0} 条回声 {isExpanded ? '· 收起' : '· 点击展开'}
+          </span>
+        </button>
+      </div>
+
+      {isExpanded && (
+        <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+          {/* 回复列表 - 时间线样式 */}
+          <div className="space-y-4 pl-1 relative">
+            <div className="absolute left-0 top-2 bottom-12 w-[1px] bg-white/5"></div>
+
+            {replies?.map((r, i) => (
+              <div key={`reply-${i}`} className="flex gap-3 items-start relative animate-in slide-in-from-left-2" style={{ animationDelay: `${i * 100}ms` }}>
+                <div className="w-2 h-2 rounded-full mt-2 -ml-[3.5px] z-10 bg-blue-500/40"></div>
+                <div className="flex-1 rounded-2xl p-4 border border-white/[0.05] bg-white/[0.03] hover:border-white/[0.08] transition-all">
+                  <div className="flex justify-between mb-1 opacity-40 text-[9px] uppercase tracking-tighter">
+                    <span>岛民 #{generateShortId(r.content)}</span>
+                    <span>{r.time || '未知时间'}</span>
+                  </div>
+                  <p className="text-xs leading-relaxed text-blue-50/70">{r.content}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* 输入框 */}
+          <div className="relative mt-6 group">
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="留下你的回声..."
+              className="w-full rounded-2xl p-4 pr-14 text-xs outline-none border border-white/5 bg-black/30 text-white focus:border-blue-500/30 transition-all resize-none shadow-inner"
+              rows={2}
+            />
+            <button
+              onClick={handleSubmit}
+              disabled={!text.trim() || loading}
+              className={`absolute right-3 bottom-3 p-3 rounded-xl transition-all active:scale-90 ${text.trim() ? 'text-blue-500 hover:bg-blue-500/10' : 'text-gray-500 opacity-20'}`}
+            >
+              {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function HomePage() {
   const navigate = useNavigate();
   const [view, setView] = useState('home');
@@ -338,6 +440,19 @@ export default function HomePage() {
       }
     };
     loadMusicConfig();
+
+    // 加载邮箱配置
+    const loadEmailConfig = async () => {
+      try {
+        const result = await emailConfigApi.getConfig();
+        if (result.code === 200) {
+          setEmailEnabled(result.data.enabled ?? false);
+        }
+      } catch (error) {
+        console.error('获取邮箱配置失败:', error);
+      }
+    };
+    loadEmailConfig();
   }, []);
 
   // 心跳 - 保持在线状态并获取在线人数
@@ -393,12 +508,27 @@ export default function HomePage() {
   const [secretCode, setSecretCode] = useState('');
   const [avatarType, setAvatarType] = useState('anonymous');
   const [qqNumber, setQqNumber] = useState('');
+  const [email, setEmail] = useState('');
   const [selectedAnonAvatar, setSelectedAnonAvatar] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [isAuditing, setIsAuditing] = useState(false);
   const [auditError, setAuditError] = useState('');
+  const [emailEnabled, setEmailEnabled] = useState(false);
+  const [pickedMessage, setPickedMessage] = useState(null);
+  const [reportToast, setReportToast] = useState(false);
+
+  // 生成4位简短ID
+  const generateShortId = (seed) => {
+    if (!seed) return Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) {
+      hash = ((hash << 5) - hash) + seed.charCodeAt(i);
+      hash = hash & hash;
+    }
+    return Math.abs(hash % 10000).toString().padStart(4, '0');
+  };
 
   // 审核错误提示 5 秒后自动消失
   useEffect(() => {
@@ -770,6 +900,11 @@ export default function HomePage() {
       alert('请填写留言内容和暗号');
       return;
     }
+    // QQ号格式校验（5-12位纯数字）
+    if (avatarType === 'qq' && qqNumber && !/^\d{5,12}$/.test(qqNumber)) {
+      alert('请输入正确的QQ号码（5-12位数字）');
+      return;
+    }
     setIsSubmitting(true);
     setIsAuditing(true);
     setAuditError('');
@@ -809,7 +944,8 @@ export default function HomePage() {
         secretCode,
         avatarType,
         avatarId: avatarType === 'qq' ? qqNumber : selectedAnonAvatar.toString(),
-        avatarUrl
+        avatarUrl,
+        email
       });
 
       setShowSuccessToast(true);
@@ -818,6 +954,8 @@ export default function HomePage() {
       setContent('');
       setSearchCode(secretCode);
       setSecretCode('');
+      setEmail('');
+      setQqNumber('');
       setAuditError('');
       setView('browse');
       setHasSearched(false);
@@ -827,6 +965,75 @@ export default function HomePage() {
     } finally {
       setIsSubmitting(false);
       setIsAuditing(false);
+    }
+  };
+
+  const handleAddReply = async (msgId, replyContent) => {
+    try {
+      await messageApi.addReply(msgId, replyContent);
+      // 重新获取消息列表以更新回复
+      if (searchCode) {
+        const result = await messageApi.getMessagesBySecret(searchCode);
+        if (result.data?.messages) {
+          setMessages(result.data.messages);
+        }
+      } else {
+        const result = await messageApi.getMessages();
+        if (result.data?.messages) {
+          setMessages(result.data.messages);
+        }
+      }
+    } catch (e) {
+      console.error('回复失败:', e);
+    }
+  };
+
+  // 拾取暗号为 blueisland 的留言
+  const handlePickup = async () => {
+    try {
+      const result = await messageApi.pickupMessages();
+      const blueMessages = result.data?.messages || [];
+      if (blueMessages.length === 0) {
+        alert('暂时没有可拾取的回声');
+        return;
+      }
+      const randomIndex = Math.floor(Math.random() * blueMessages.length);
+      setPickedMessage(blueMessages[randomIndex]);
+    } catch (error) {
+      console.error('拾取失败:', error);
+      alert('拾取失败，请重试');
+    }
+  };
+
+  const [resonatingId, setResonatingId] = useState(null);
+
+  const handleReport = async (msgId) => {
+    if (!confirm('确定要举报这条留言吗？我们会尽快审核。')) return;
+    try {
+      await messageApi.reportMessage(msgId);
+      // 更新本地消息的举报计数
+      setMessages(msgs => msgs.map(m =>
+        m.id === msgId ? { ...m, reportCount: (m.reportCount || 0) + 1 } : m
+      ));
+      setReportToast(true);
+      setTimeout(() => setReportToast(false), 1200);
+    } catch (e) {
+      console.error('举报失败:', e);
+      alert('举报失败，请重试');
+    }
+  };
+
+  const handleResonance = async (msgId) => {
+    try {
+      await messageApi.resonanceMessage(msgId);
+      setResonatingId(msgId);
+      // 更新本地消息的共鸣计数
+      setMessages(msgs => msgs.map(m =>
+        m.id === msgId ? { ...m, resonanceCount: (m.resonanceCount || 0) + 1 } : m
+      ));
+      setTimeout(() => setResonatingId(null), 1000);
+    } catch (e) {
+      console.error('共鸣失败:', e);
     }
   };
 
@@ -846,6 +1053,39 @@ export default function HomePage() {
       {/* 岛屿动态背景 */}
       <IslandCanvas />
 
+      {/* 拾取弹窗 */}
+      {pickedMessage && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="absolute inset-0 bg-[#020a13]/80 backdrop-blur-md" onClick={() => setPickedMessage(null)}></div>
+          <div className="relative w-full max-w-sm bg-white/10 backdrop-blur-3xl border border-white/20 rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in-95 duration-300">
+            <div className="flex items-center gap-2 mb-6 opacity-30 text-[10px] tracking-widest uppercase">
+              <Waves size={12} /> <span>漂流而来的回声</span>
+            </div>
+            <p className="text-lg font-serif italic text-blue-50 leading-relaxed mb-8">
+              "{pickedMessage?.content || "海面上静悄悄的，什么也没捡到..."}"
+            </p>
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] opacity-20 font-mono">
+                {pickedMessage?.avatarType === 'qq' ? `QQ: ${pickedMessage?.avatarId}` : `岛民 #${generateShortId(pickedMessage?.id?.toString())}`}
+              </span>
+              <button onClick={() => setPickedMessage(null)} className="px-6 py-2 bg-blue-600/50 rounded-full text-[10px] font-bold">收起</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 举报成功弹窗 */}
+      {reportToast && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-6 pointer-events-none animate-in fade-in duration-200">
+          <div className="bg-green-500/90 backdrop-blur-xl border border-green-400/30 rounded-2xl px-8 py-4 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 text-white">
+              <AlertTriangle size={18} />
+              <span className="text-sm font-medium">举报已提交，我们将尽快审核</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="relative z-10 container mx-auto px-6 max-w-lg">
         {view === 'home' && (
           <div className="flex flex-col items-center justify-center min-h-[85vh] space-y-12">
@@ -860,35 +1100,51 @@ export default function HomePage() {
                 </div>
               </div>
               <h2 className="mt-8 text-sm text-blue-100/90 tracking-widest font-serif text-center px-4 italic leading-relaxed">
-                {islandQuote}
+                "{islandQuote}"
               </h2>
               <div className="mt-2 text-[9px] opacity-40 uppercase tracking-widest flex justify-center gap-4">
                 <span>岛屿当前：{islandMood.weather}</span>
                 <span>在线：{onlineUsers}</span>
               </div>
             </div>
-            <div className="w-full space-y-6">
+            {/* 兑卦 (☱) 布局按钮组 */}
+            <div className="w-full space-y-4 max-w-xs mx-auto relative">
+
+              {/* 阴爻 (⚋) - 上方断开的两个按钮 */}
+              <div className="flex gap-4">
+                <button
+                  onClick={handlePickup}
+                  className="flex-1 py-4 bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 hover:bg-white/10 transition-all flex flex-col items-center justify-center gap-2 group"
+                >
+                  <Sparkles size={16} className="text-blue-400/40 group-hover:text-blue-400" />
+                  <span className="text-[10px] tracking-[0.4em] font-bold text-blue-100/40 group-hover:text-blue-100">拾取</span>
+                </button>
+                <button
+                  onClick={() => setIsSpiritOpen(true)}
+                  className="flex-1 py-4 bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 hover:bg-white/10 transition-all flex flex-col items-center justify-center gap-2 group"
+                >
+                  <Bot size={16} className="text-indigo-400/40 group-hover:text-indigo-400" />
+                  <span className="text-[10px] tracking-[0.4em] font-bold text-blue-100/40 group-hover:text-blue-100">灵谈</span>
+                </button>
+              </div>
+
+              {/* 阳爻 (⚊) - 中间连续长条 */}
               <button
                 onClick={() => setView('send')}
-                className="group relative w-full py-4 bg-blue-500/80 backdrop-blur-md rounded-2xl font-medium tracking-widest hover:bg-blue-400 transition-all shadow-lg border border-white/10 overflow-hidden"
+                className="w-full py-5 bg-blue-600/80 backdrop-blur-md rounded-2xl font-bold tracking-[0.6em] text-sm hover:bg-blue-500 transition-all shadow-[0_0_20px_rgba(37,99,235,0.2)] active:scale-95"
               >
-                <span className="relative z-10">发送留言</span>
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+                发送留言
               </button>
+
+              {/* 阳爻 (⚊) - 下方连续长条 */}
               <button
                 onClick={() => setView('browse')}
-                className="w-full py-4 bg-blue-400/20 backdrop-blur-md rounded-2xl font-medium tracking-widest hover:bg-blue-400/40 transition-all shadow-lg border border-white/10"
+                className="w-full py-5 bg-[#1a2b3c]/50 backdrop-blur-md rounded-2xl font-bold tracking-[0.6em] text-xs border border-white/5 text-blue-200/40 hover:bg-white/5 transition-all"
               >
-                查询留言
-              </button>
-              <button
-                onClick={() => setIsSpiritOpen(true)}
-                className="w-full py-4 bg-indigo-500/20 backdrop-blur-md rounded-2xl font-medium tracking-widest hover:bg-indigo-500/40 transition-all shadow-lg border border-white/10 flex items-center justify-center gap-3"
-              >
-                <Bot className="text-indigo-400" size={18} />
-                <span>对话岛屿之灵</span>
+                寻找回声
               </button>
             </div>
+
             <div className="fixed bottom-10 opacity-30 text-[10px] tracking-widest font-serif italic">
               BlueIsland v2.0 • 思考与留白
             </div>
@@ -905,12 +1161,16 @@ export default function HomePage() {
                   <div className="flex justify-between mb-2">
                     <label className="text-[10px] opacity-60 tracking-widest">MESSAGE CONTENT</label>
                   </div>
-                  <textarea
-                    value={content}
-                    onChange={e => setContent(e.target.value)}
-                    placeholder="提笔落墨，心事可寄于此..."
-                    className="w-full h-40 bg-black/20 rounded-2xl p-4 text-sm focus:ring-1 focus:ring-blue-400 outline-none border border-white/5 resize-none placeholder:text-gray-600 transition-all"
-                  />
+                  <div className="relative">
+                    <textarea
+                      value={content}
+                      onChange={e => setContent(e.target.value.slice(0, 500))}
+                      maxLength={500}
+                      placeholder="提笔落墨，心事可寄于此..."
+                      className="w-full h-40 bg-black/20 rounded-2xl p-4 pr-12 text-sm focus:ring-1 focus:ring-blue-400 outline-none border border-white/5 resize-none placeholder:text-gray-600 transition-all"
+                    />
+                    <span className={`absolute bottom-3 right-4 text-[10px] ${content.length > 450 ? 'text-red-400' : 'opacity-30'}`}>{content.length}/500</span>
+                  </div>
                 </div>
 
                 {/* AI 审核错误提示 */}
@@ -960,6 +1220,23 @@ export default function HomePage() {
                     placeholder="输入QQ号获取头像"
                     className="w-full bg-black/20 rounded-xl p-3 text-xs border border-white/5 outline-none focus:ring-1 focus:ring-blue-400"
                   />
+                )}
+
+                {/* 邮箱通知 - 仅当后台启用时显示 */}
+                {emailEnabled && (
+                  <div>
+                    <label className="text-[10px] opacity-60 block mb-2 tracking-widest">EMAIL NOTIFICATION</label>
+                    <div className="relative">
+                      <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 opacity-30" />
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                        placeholder="回声通知邮箱 (可选)"
+                        className="w-full bg-black/20 rounded-xl pl-10 pr-4 py-3 text-xs outline-none border border-white/5 focus:ring-1 focus:ring-blue-400"
+                      />
+                    </div>
+                  </div>
                 )}
 
                 <button
@@ -1014,13 +1291,38 @@ export default function HomePage() {
                   <div className="text-xs font-serif italic">未找到匹配的留言...</div>
                 </div>
               ) : (
-                messages.map((msg, i) => (
+                messages.map((msg, i) => {
+                const isBlocked = msg.reportCount >= 5;
+                return (
                 <div key={msg.id} className="relative animate-in slide-in-from-left-4" style={{ animationDelay: `${i * 50}ms` }}>
                   <div className="absolute -left-[21px] top-6 w-3 h-3 rounded-full bg-white shadow-[0_0_12px_rgba(255,255,255,0.8)] border-2 border-[#05162a]"></div>
 
-                  <div className="bg-white/10 backdrop-blur-md rounded-3xl p-6 border border-white/10 shadow-lg group hover:bg-white/15 transition-all">
+                  <div className="bg-white/10 backdrop-blur-md rounded-3xl p-6 border border-white/10 shadow-lg group hover:bg-white/15 transition-all relative">
+                    {/* 共鸣按钮和举报按钮 - 右上角 */}
+                    <div className="absolute top-4 right-4 flex items-center gap-2">
+                      {/* 共鸣按钮 */}
+                      {!isBlocked && (
+                        <button
+                          onClick={() => handleResonance(msg.id)}
+                          className={`flex items-center gap-1 px-3 py-1.5 rounded-xl border transition-all active:scale-95 ${resonatingId === msg.id ? 'bg-blue-500/40 border-blue-400/40 text-blue-300' : 'bg-blue-500/10 border-blue-500/20 text-blue-300/60 hover:bg-blue-500/20'}`}
+                        >
+                          <Heart size={12} fill={resonatingId === msg.id ? 'currentColor' : 'none'} className={resonatingId === msg.id ? 'animate-bounce' : ''} />
+                          <span className="text-[10px] font-bold tabular-nums">{msg.resonanceCount || 0}</span>
+                        </button>
+                      )}
+                      {/* 举报按钮 */}
+                      {!isBlocked && (
+                        <button
+                          onClick={() => handleReport(msg.id)}
+                          className="flex items-center gap-1 text-[10px] opacity-30 hover:opacity-100 hover:text-red-400 transition-all"
+                        >
+                          <ShieldAlert size={11} />
+                        </button>
+                      )}
+                    </div>
+
                     <div className="flex items-center gap-3 mb-4">
-                      <img src={msg.avatarUrl} alt="" className="w-10 h-10 rounded-xl border border-white/20 object-cover shadow-sm" />
+                      <img src={msg.avatarUrl || '/default-avatar.png'} alt="" className="w-10 h-10 rounded-xl border border-white/20 object-cover shadow-sm" onError={(e) => e.target.src = 'https://api.dicebear.com/7.x/lorelei/svg?seed=default'} />
                       <div>
                         <div className="text-sm font-bold text-blue-100">{msg.avatarType === 'qq' ? `QQ用户(${msg.avatarId})` : '匿名岛民'}</div>
                         <div className="text-[10px] opacity-30">
@@ -1028,10 +1330,19 @@ export default function HomePage() {
                         </div>
                       </div>
                     </div>
-                    <p className="text-sm leading-relaxed text-blue-50/90 whitespace-pre-wrap font-serif italic mb-4">{msg.content}</p>
 
-                    {/* AI 回响模块 */}
-                    {msg.aiEcho && (
+                    {/* 屏蔽内容 */}
+                    {isBlocked ? (
+                      <div className="flex flex-col items-center py-6 gap-2 bg-red-500/5 rounded-2xl border border-red-500/10">
+                        <AlertTriangle size={24} className="text-red-400 opacity-40"/>
+                        <p className="text-[10px] text-red-400/60 tracking-widest text-center px-4">[ 该内容因违规已被海浪卷走 ]</p>
+                      </div>
+                    ) : (
+                      <p className="text-sm leading-relaxed text-blue-50/90 whitespace-pre-wrap font-serif italic mb-4">{msg.content}</p>
+                    )}
+
+                    {/* AI 回响模块 - 被屏蔽时不显示 */}
+                    {!isBlocked && msg.aiEcho && (
                       <div className="mt-4 p-3 bg-indigo-500/10 rounded-2xl border border-indigo-500/20 flex gap-2 items-start animate-in fade-in duration-1000">
                         <MessageCircleHeart className="text-indigo-400 shrink-0 mt-0.5" size={12} />
                         <div className="text-[10px] text-indigo-200/80 italic font-serif leading-relaxed">
@@ -1046,9 +1357,25 @@ export default function HomePage() {
                         <Lock size={9} className="mr-1"/> 暗号: {searchCode}
                       </div>
                     )}
+
+                    {/* 显示邮箱通知标识 */}
+                    {msg.email && (
+                      <div className="mt-2 ml-1 inline-flex items-center gap-1 text-[9px] opacity-30">
+                        <Mail size={9} /> 回声通知已开启
+                      </div>
+                    )}
+
+                    {/* 嵌套回复系统 */}
+                    <ReplyEcho
+                      msgId={msg.id}
+                      replies={msg.replies}
+                      onReplySubmit={handleAddReply}
+                      isBlocked={isBlocked}
+                    />
                   </div>
                 </div>
-              ))
+                );
+              })
               )}
             </div>
           </div>

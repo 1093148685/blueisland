@@ -83,4 +83,26 @@ public class Message
     /// </summary>
     [SugarColumn(Length = 64, IsNullable = true)]
     public string? Browser { get; set; }
+
+    /// <summary>
+    /// 回复列表 (JSON格式存储)
+    /// </summary>
+    [SugarColumn(Length = 2000, IsNullable = true)]
+    public string? Replies { get; set; }
+
+    /// <summary>
+    /// 举报次数
+    /// </summary>
+    public int ReportCount { get; set; } = 0;
+
+    /// <summary>
+    /// 共鸣次数
+    /// </summary>
+    public int ResonanceCount { get; set; } = 0;
+
+    /// <summary>
+    /// 邮箱（用于通知）
+    /// </summary>
+    [SugarColumn(Length = 128, IsNullable = true)]
+    public string? Email { get; set; }
 }

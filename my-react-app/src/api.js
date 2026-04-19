@@ -1,7 +1,17 @@
 import axios from 'axios';
+import CryptoJS from 'crypto-js';
 
 // 使用相对路径，通过 nginx 代理到后端
 const API_BASE_URL = '/api';
+
+// 签名密钥（需与服务端一致）
+const SIGNATURE_KEY = 'BlueIsland.Secret.Key.2024.Security';
+
+// 生成 HMAC-SHA256 签名
+const generateSignature = (path, timestamp) => {
+  const dataToSign = `${path}:${timestamp}`;
+  return CryptoJS.HmacSHA256(dataToSign, SIGNATURE_KEY).toString(CryptoJS.enc.Base64);
+};
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -10,12 +20,23 @@ const api = axios.create({
   },
 });
 
-// 请求拦截器 - 添加 token
+// 请求拦截器 - 添加 token 和签名
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
+  // POST/PUT/DELETE 请求添加签名
+  if (['post', 'put', 'delete'].includes(config.method?.toLowerCase())) {
+    const timestamp = Date.now().toString();
+    // 使用完整的请求路径（包含 /api 前缀）
+    const fullPath = config.baseURL + config.url;
+    const signature = generateSignature(fullPath, timestamp);
+    config.headers['X-Timestamp'] = timestamp;
+    config.headers['X-Signature'] = signature;
+  }
+
   return config;
 });
 
@@ -43,6 +64,7 @@ export const authApi = {
 export const messageApi = {
   getMessages: () => api.get('/messages'),
   getMessagesBySecret: (secretCode) => api.get(`/messages/${secretCode}`),
+  pickupMessages: () => api.get('/messages/pickup'),
   createMessage: (data) => api.post('/messages', data),
   unlockMessage: (data) => api.post('/messages/unlock', data),
   getDailyQuote: () => api.get('/messages/daily-quote'),
@@ -53,6 +75,10 @@ export const messageApi = {
     api.get(`/messages/admin?page=${page}&pageSize=${pageSize}`),
   deleteMessage: (id) => api.delete(`/messages/admin/${id}`),
   updateMessage: (id, data) => api.put(`/messages/admin/${id}`, data),
+  resetReportCount: (id) => api.put(`/messages/admin/${id}/reset-report`),
+  addReply: (msgId, replyContent) => api.post(`/messages/${msgId}/reply`, { content: replyContent }),
+  reportMessage: (msgId) => api.post(`/messages/${msgId}/report`),
+  resonanceMessage: (msgId) => api.post(`/messages/${msgId}/resonance`),
 };
 
 // 岛屿之灵相关
@@ -104,6 +130,24 @@ export const accessApi = {
   getStats: () => api.get('/access/stats'),
   heartbeat: (page, sessionId) => api.post('/access/heartbeat', { page, sessionId }),
   getOnlineUsers: () => api.get('/access/online'),
+};
+
+// 邮箱配置相关
+export const emailConfigApi = {
+  getConfig: () => api.get('/email-config'),
+  saveConfig: (data) => api.post('/email-config', data),
+  testConfig: (data) => api.post('/email-config/test', data),
+};
+
+// 安全监控相关
+export const securityApi = {
+  getStats: () => api.get('/security/stats'),
+  getLogs: (page, pageSize) => api.get(`/security/logs?page=${page}&pageSize=${pageSize}`),
+  getSettings: () => api.get('/security/settings'),
+  saveSettings: (data) => api.post('/security/settings', data),
+  getBlockedIps: () => api.get('/security/blocked-ips'),
+  unblockIp: (ip) => api.delete(`/security/blocked-ips/${ip}`),
+  blockIp: (data) => api.post('/security/blocked-ips', data),
 };
 
 export default api;
